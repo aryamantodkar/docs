@@ -1,0 +1,372 @@
+---
+title: 'Setting Up Your First Workspace'
+description: 'Complete guide to creating your OneGlance workspace and running your first brand visibility analysis'
+---
+
+## Overview
+
+Your OneGlance workspace tracks how AI providers mention your brand. This guide walks you through creating a workspace, configuring your brand details, and running your first analysis.
+
+<Note>
+  Each workspace tracks one brand across multiple AI providers (ChatGPT, Claude, Perplexity, Gemini, etc.). If you track multiple brands, create separate workspaces.
+</Note>
+
+## Prerequisites
+
+Before starting, you'll need:
+
+- A OneGlance account
+- Your brand name (e.g., "Pipedrive")
+- Your brand's primary domain (e.g., "pipedrive.com")
+
+## Step 1: Create Your Workspace
+
+<Steps>
+  <Step title="Navigate to Workspace Creation">
+    After logging in, click **Create Workspace** from the sidebar or dashboard.
+  </Step>
+
+  <Step title="Enter Brand Details">
+    Fill in the workspace creation form:
+
+    - **Brand Name**: The name AI providers should mention (e.g., "HubSpot", "Salesforce")
+    - **Brand Domain**: Your primary website domain without protocol (e.g., "hubspot.com")
+    - **Organization Name** (optional): Your company name if different from brand
+
+    <Warning>
+      The brand domain is critical for accurate tracking. OneGlance uses it to:
+      - Detect brand mentions in AI responses
+      - Track citation sources
+      - Calculate visibility metrics
+
+      Use your primary domain only. Don't include:
+      - Protocol (`https://`)
+      - www prefix
+      - Path segments (`/products`)
+    </Warning>
+  </Step>
+
+  <Step title="Review and Create">
+    Click **Create Workspace** to finalize. You'll be redirected to the onboarding flow.
+  </Step>
+</Steps>
+
+## Step 2: Configure Your First Prompts
+
+Prompts are the questions OneGlance asks AI providers on your behalf. Good prompts reflect real buyer questions in your category.
+
+### Understanding Prompt Strategy
+
+Effective prompts:
+- **Mirror buyer intent**: Use questions your prospects actually ask
+- **Cover key use cases**: Include prompts for different buyer personas and scenarios
+- **Test competitive positioning**: Ask questions where competitors might surface
+- **Vary specificity**: Mix broad category queries with specific feature comparisons
+
+### Adding Prompts During Onboarding
+
+<Steps>
+  <Step title="Use Suggested Prompts">
+    OneGlance provides category-appropriate suggestions. Click any suggestion to add it to your prompt list.
+
+    Example suggestions for a CRM brand:
+    - "What are the best alternatives to {brand} for growing teams?"
+    - "Which tools are most recommended for sales pipeline management?"
+    - "Compare {brand} with top competitors for pricing and value."
+  </Step>
+
+  <Step title="Add Custom Prompts">
+    Enter your own prompts in the text area, **one per line**:
+
+    ```text
+    What are the best CRM tools for small businesses?
+    Which sales automation platform has the best integrations?
+    Compare Salesforce vs HubSpot vs Pipedrive for mid-market teams
+    What's the easiest CRM to set up for startups?
+    ```
+
+    <Tip>
+      Start with 6-10 prompts for your first run. You can add more later from the [Prompts page](/guides/managing-prompts).
+    </Tip>
+  </Step>
+
+  <Step title="Save and Run">
+    Click **Save Prompts & Run Analysis**. OneGlance will:
+    1. Save your prompts to the workspace
+    2. Queue jobs for each enabled AI provider
+    3. Run your prompts across all providers
+    4. Analyze responses for brand mentions and metrics
+  </Step>
+</Steps>
+
+### What Happens During First Run
+
+The onboarding run executes in this sequence:
+
+1. **Job Submission** (apps/web → packages/services)
+   ```typescript
+   // From apps/web/src/app/(auth)/onboarding/page.tsx:152
+   const run = await runAgent.mutateAsync({ workspaceId });
+   const nextJobId = run?.jobId;
+   ```
+
+2. **Provider Queue Distribution** (packages/services/src/agent/jobs.ts:59)
+   ```typescript
+   await Promise.all(
+     enabledProviders.map((provider) =>
+       getProviderQueue(provider).add('run-agent', {
+         jobGroupId,
+         provider,
+         prompts,
+         user_id: userId,
+         workspace_id: workspaceId,
+       })
+     )
+   );
+   ```
+
+3. **Parallel Execution**: Each provider (ChatGPT, Claude, etc.) processes all prompts simultaneously
+
+4. **Response Storage**: Raw responses are saved to ClickHouse
+
+5. **AI Analysis**: OpenAI analyzes each response for:
+   - Brand mentions and sentiment
+   - Competitive positioning
+   - GEO score (Generative Engine Optimization)
+   - Citations and sources
+
+### Monitoring Progress
+
+Watch the real-time progress tracker:
+
+<Accordion title="Provider Status Indicators">
+  - **Pending**: Job queued but not started
+  - **Running**: Provider actively processing prompts (spinning loader)
+  - **Completed**: All prompts processed successfully (green checkmark)
+  - **Failed**: Provider encountered an error
+
+  Example from `apps/web/src/app/(auth)/onboarding/page.tsx:293`:
+  ```tsx
+  {PROVIDER_LIST.map((provider) => {
+    const state = providerStates[provider] ?? 'pending';
+    return (
+      <div className="rounded-lg border border-gray-200 px-3 py-2">
+        <p>{getProviderDisplayName(provider)}</p>
+        {state === 'completed' ? (
+          <CheckCircle2 className="text-emerald-500" />
+        ) : state === 'running' ? (
+          <Loader2 className="animate-spin" />
+        ) : (
+          <span>Pending</span>
+        )}
+      </div>
+    );
+  })}
+  ```
+</Accordion>
+
+You'll automatically redirect to the dashboard once initial data is available—usually within 2-5 minutes.
+
+## Step 3: Configure AI Provider Settings
+
+By default, OneGlance queries all supported AI providers. You can customize this in Settings.
+
+<Steps>
+  <Step title="Navigate to Settings">
+    From any page, click **Settings** in the sidebar.
+  </Step>
+
+  <Step title="Edit Active Providers">
+    In the **AI Providers** section, click the edit icon (pencil).
+
+    Select which providers to query:
+    - **ChatGPT** (OpenAI GPT-4)
+    - **Claude** (Anthropic)
+    - **Perplexity** (Perplexity AI)
+    - **Gemini** (Google)
+    - **MetaAI** (Meta)
+  </Step>
+
+  <Step title="Save Provider Settings">
+    Click **Save Changes**. This affects **future** prompt runs only—past data remains unchanged.
+
+    <Warning>
+      You must enable at least one provider. Disabling all providers will show an error.
+    </Warning>
+  </Step>
+</Steps>
+
+### When to Adjust Providers
+
+**Reduce costs**: Fewer providers = fewer API calls
+**Focus on key channels**: If your buyers primarily use ChatGPT, prioritize it
+**Expand coverage**: Enable all providers for comprehensive visibility tracking
+
+## Step 4: Understanding Your Dashboard
+
+After your first run completes, the dashboard displays:
+
+### Key Metrics
+
+<CardGroup cols={2}>
+  <Card title="Presence Rate" icon="percentage">
+    Percentage of responses where your brand was mentioned.
+
+    **Example**: 65% presence means your brand appeared in 13 of 20 AI responses.
+  </Card>
+
+  <Card title="Average Rank" icon="ranking-star">
+    Your brand's average position when listed alongside competitors.
+
+    **Example**: Rank #2 means you're typically the second brand mentioned.
+  </Card>
+
+  <Card title="Top Source" icon="link">
+    Most frequently cited domain in AI responses about your brand.
+
+    **Example**: "g2.com" indicates G2 reviews heavily influence AI recommendations.
+  </Card>
+
+  <Card title="Top Competitor" icon="users">
+    Brand most often mentioned alongside yours.
+
+    **Example**: "HubSpot" appearing in 80% of responses where you're mentioned.
+  </Card>
+</CardGroup>
+
+### GEO Score Explained
+
+The **GEO (Generative Engine Optimization) Score** (0-100) measures your brand's AI visibility using four weighted components:
+
+```typescript
+// From packages/services/src/analysis/analysisPrompt.ts:262
+overall = round(
+  (visibility_value × 0.25) +
+  (rank_value × 0.25) +
+  (sentiment_value × 0.25) +
+  (recommendation_value × 0.25)
+)
+```
+
+**Components**:
+1. **Visibility (25%)**: How prominently your brand appears (placement, coverage, frequency)
+2. **Rank (25%)**: Position in recommendation lists (#1 = 100, #2 = 80, etc.)
+3. **Sentiment (25%)**: Tone of mentions (positive/neutral/negative)
+4. **Recommendation (25%)**: Endorsement strength (top_pick = 100, conditional = 60, etc.)
+
+<Accordion title="GEO Score Interpretation">
+  - **80-100**: Dominant - Brand is a top recommendation with strong positioning
+  - **60-79**: Strong - Consistently mentioned with favorable sentiment
+  - **40-59**: Moderate - Present but not strongly recommended
+  - **20-39**: Weak - Mentioned in passing or with caveats
+  - **0-19**: Absent/Minimal - Rarely appears or negatively positioned
+</Accordion>
+
+## Step 5: Invite Team Members
+
+<Steps>
+  <Step title="Navigate to People">
+    Click **People** in the sidebar.
+  </Step>
+
+  <Step title="Add Members by Email">
+    In the Members section:
+    1. Enter teammate's email
+    2. Select role (**Member** or **Owner**)
+    3. Click **Add**
+
+    If the email isn't registered yet, they'll need to sign up first.
+  </Step>
+
+  <Step title="Share Workspace Code">
+    Alternative method: Copy the **Workspace Join Code** and share it.
+
+    Your teammate can use this code during signup or from their workspace switcher to join instantly.
+  </Step>
+</Steps>
+
+### Role Permissions
+
+| Permission | Member | Owner |
+|------------|--------|-------|
+| View dashboard & prompts | ✅ | ✅ |
+| Run prompts & analysis | ✅ | ✅ |
+| Edit prompts & schedule | ✅ | ✅ |
+| Add/remove members | ❌ | ✅ |
+| Edit brand details | ❌ | ✅ |
+| Delete workspace | ❌ | ✅ |
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="First run shows no data after 10+ minutes">
+    **Possible causes**:
+    - All providers failed (check status indicators on onboarding page)
+    - No prompts were saved (verify on Prompts page after redirecting)
+    - Network issues during job submission
+
+    **Solution**: Navigate to Prompts page, verify your prompts exist, then manually run analysis:
+    1. Go to Schedule page
+    2. Click "Save Schedule" (this triggers an immediate run)
+    3. Monitor progress on Dashboard
+  </Accordion>
+
+  <Accordion title="Brand domain not detecting mentions correctly">
+    **Common mistakes**:
+    - Including `https://` or `www.`
+    - Using a subdomain (use `company.com`, not `app.company.com`)
+    - Using a redirect domain
+
+    **Solution**: Go to People page → Edit Brand Workspace → Update domain.
+
+    <Warning>
+      Changing brand domain clears all analyzed data but keeps raw responses. Re-analysis is required.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="GEO scores seem low for my brand">
+    This is often accurate, not a bug. AI providers may:
+    - Not recognize your brand in your category
+    - Prioritize competitors with more public content
+    - Lack recent information about your product
+
+    **Solutions**:
+    - Review [Interpreting Metrics](/guides/interpreting-metrics) to understand scoring
+    - Check [Managing Prompts](/guides/managing-prompts) to refine your prompt strategy
+    - Analyze which sources are cited—these influence AI recommendations
+  </Accordion>
+
+  <Accordion title="Workspace code not working for teammates">
+    **Possible causes**:
+    - Teammate using an organization invite code instead of workspace code
+    - Code copied incorrectly (check for extra spaces)
+
+    **Solution**: Re-copy the code from People page → Workspace Join Code section.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Managing Prompts" icon="messages" href="/guides/managing-prompts">
+    Learn to refine prompts, add variations, and optimize for better visibility
+  </Card>
+
+  <Card title="Scheduling" icon="clock" href="/guides/scheduling">
+    Automate regular runs to track AI visibility trends over time
+  </Card>
+
+  <Card title="Interpreting Metrics" icon="chart-line" href="/guides/interpreting-metrics">
+    Deep dive into GEO scores, sentiment analysis, and competitive positioning
+  </Card>
+
+  <Card title="Team Collaboration" icon="users" href="/guides/team-collaboration">
+    Best practices for multi-user workflows and access control
+  </Card>
+</CardGroup>
+
+## Related Concepts
+
+- [Quickstart](/quickstart) - Fast setup overview
+- [API Reference](/api/overview) - Programmatic access to workspace data
+- [Local Setup](/development/local-setup) - Self-hosting and custom deployments

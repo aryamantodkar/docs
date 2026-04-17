@@ -1,0 +1,130 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "OneGlanse",
+  "theme": "mint",
+  "colors": {
+    "primary": "#4F46E5",
+    "light": "#818CF8",
+    "dark": "#3730A3"
+  },
+  "favicon": "/favicon.svg",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/aryamantodkar/oneglanse"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/aryamantodkar/oneglanse"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/workspaces",
+              "concepts/prompts",
+              "concepts/providers",
+              "concepts/analysis"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/setup",
+              "guides/managing-prompts",
+              "guides/scheduling",
+              "guides/team-collaboration",
+              "guides/interpreting-metrics"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Architecture",
+            "pages": [
+              "development/overview",
+              "development/monorepo-structure",
+              "development/tech-stack"
+            ]
+          },
+          {
+            "group": "Setup & Deployment",
+            "pages": [
+              "development/local-setup",
+              "development/environment-variables",
+              "development/docker-compose"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "development/web-app",
+              "development/agent-worker",
+              "development/services-layer",
+              "development/database"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "development/contributing",
+              "development/adding-providers"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "tRPC API",
+            "pages": [
+              "api/overview",
+              "api/workspace",
+              "api/prompts",
+              "api/analysis",
+              "api/agent"
+            ]
+          },
+          {
+            "group": "Services",
+            "pages": [
+              "api/services/workspace",
+              "api/services/prompt",
+              "api/services/analysis",
+              "api/services/agent"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types/agent",
+              "api/types/analysis",
+              "api/types/entities"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

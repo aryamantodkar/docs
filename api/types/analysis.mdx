@@ -1,0 +1,826 @@
+---
+title: "Analysis Types"
+description: "TypeScript types for brand analysis, metrics, and AI response evaluation"
+---
+
+## Overview
+
+The analysis types module defines the core data structures for analyzing brand presence in AI-generated responses. These types power OneGlance's ability to evaluate brand visibility, sentiment, positioning, and competitive landscape across multiple AI models.
+
+## AnalysisFilters
+
+Filter parameters for querying analysis data.
+
+```typescript
+interface AnalysisFilters {
+  modelFilter?: string;
+  timeFilter?: "all" | "7d" | "14d" | "30d";
+  promptId?: string;
+}
+```
+
+<ResponseField name="modelFilter" type="string">
+  Filter by specific AI model provider (e.g., "chatgpt", "claude")
+</ResponseField>
+
+<ResponseField name="timeFilter" type="'all' | '7d' | '14d' | '30d'">
+  Time range filter: all time, last 7 days, 14 days, or 30 days
+</ResponseField>
+
+<ResponseField name="promptId" type="string">
+  Filter to a specific prompt for detail view
+</ResponseField>
+
+### Usage
+
+```typescript
+const filters: AnalysisFilters = {
+  modelFilter: "claude",
+  timeFilter: "7d",
+  promptId: "prompt_123"
+};
+```
+
+**Used in:** `packages/utils/src/analysis/filterAnalysisRecords.ts:4`
+
+---
+
+## AnalysisInputSingle
+
+Input parameters for analyzing a single AI response.
+
+```typescript
+interface AnalysisInputSingle {
+  brandDomain: string;
+  brandName: string;
+  response: string;
+  prompt: string;
+}
+```
+
+<ResponseField name="brandDomain" type="string" required>
+  The domain of the brand being analyzed (e.g., "oneglance.ai")
+</ResponseField>
+
+<ResponseField name="brandName" type="string" required>
+  The name of the brand being analyzed
+</ResponseField>
+
+<ResponseField name="response" type="string" required>
+  The AI-generated response text to analyze
+</ResponseField>
+
+<ResponseField name="prompt" type="string" required>
+  The original prompt that generated the response
+</ResponseField>
+
+### Usage
+
+```typescript
+const input: AnalysisInputSingle = {
+  brandDomain: "oneglance.ai",
+  brandName: "OneGlance",
+  response: "OneGlance is a leading AI analytics platform...",
+  prompt: "What are the best AI analytics tools?"
+};
+```
+
+**Used in:** `packages/services/src/analysis/runAnalysis.ts:2`
+
+---
+
+## BrandAnalysisResult
+
+Comprehensive analysis result evaluating a brand's presence and perception in an AI-generated response.
+
+```typescript
+interface BrandAnalysisResult {
+  metadata?: {
+    brandName: string;
+    brandDomain: string;
+    prompt: string | null;
+    prompt_id: string | null;
+    analyzedAt: string;
+  };
+
+  geoScore: {
+    overall: number;
+    verdict: string;
+  };
+
+  presence: {
+    mentioned: boolean;
+    mentionCount: number;
+    visibility: number;
+    prominence: "dominant" | "significant" | "moderate" | "minor" | "passing" | "absent";
+    firstMentionPosition: "top" | "middle" | "bottom" | "absent";
+  };
+
+  position: {
+    rankPosition: number | null;
+    totalRanked: number | null;
+    isTopPick: boolean;
+    isTopThree: boolean;
+    rankingContext: string | null;
+  };
+
+  sentiment: {
+    score: number;
+    label: "very_negative" | "negative" | "neutral" | "positive" | "very_positive";
+    positives: string[];
+    negatives: string[];
+  };
+
+  recommendation: {
+    type: "top_pick" | "strong_alternative" | "conditional" | "mentioned_only" | "discouraged" | "not_mentioned";
+    bestFor: string[];
+    caveats: string[];
+  };
+
+  competitors: {
+    name: string;
+    domain: string;
+    visibility: number;
+    sentiment: number;
+    rankPosition: number | null;
+    isRecommended: boolean;
+    winsOver: string[];
+    losesTo: string[];
+  }[];
+
+  perception: {
+    coreClaims: string[];
+    differentiators: string[];
+    bestKnownFor: string | null;
+    pricingPerception: "premium" | "mid_range" | "budget" | "free" | "not_mentioned";
+  };
+
+  risks: {
+    hasRisks: boolean;
+    items: {
+      type: "outdated_info" | "factual_error" | "brand_confusion" | "negative_association" | "missing_from_response";
+      severity: "critical" | "warning" | "info";
+      detail: string;
+    }[];
+  };
+
+  actions: {
+    priority: "critical" | "high" | "medium" | "low";
+    recommendation: string;
+  }[];
+}
+```
+
+### Core Sections
+
+#### Metadata
+
+<ResponseField name="metadata" type="object">
+  Optional contextual information populated by application code
+</ResponseField>
+
+<ResponseField name="metadata.brandName" type="string">
+  Name of the analyzed brand
+</ResponseField>
+
+<ResponseField name="metadata.brandDomain" type="string">
+  Domain of the analyzed brand
+</ResponseField>
+
+<ResponseField name="metadata.prompt" type="string | null">
+  The prompt that generated the response
+</ResponseField>
+
+<ResponseField name="metadata.prompt_id" type="string | null">
+  Unique identifier for the prompt
+</ResponseField>
+
+<ResponseField name="metadata.analyzedAt" type="string">
+  ISO 8601 timestamp of when the analysis was performed
+</ResponseField>
+
+#### GEO Score
+
+The headline composite score (0-100) indicating overall brand performance.
+
+<ResponseField name="geoScore.overall" type="number" required>
+  Composite score from 0-100 representing overall brand performance
+</ResponseField>
+
+<ResponseField name="geoScore.verdict" type="string" required>
+  Human-readable verdict explaining the score
+</ResponseField>
+
+#### Presence
+
+Measures if and how prominently the brand appears in the response.
+
+<ResponseField name="presence.mentioned" type="boolean" required>
+  Whether the brand was mentioned at all
+</ResponseField>
+
+<ResponseField name="presence.mentionCount" type="number" required>
+  Number of times the brand was mentioned
+</ResponseField>
+
+<ResponseField name="presence.visibility" type="number" required>
+  Visibility score (0-100)
+</ResponseField>
+
+<ResponseField name="presence.prominence" type="string" required>
+  Level of prominence: `dominant`, `significant`, `moderate`, `minor`, `passing`, or `absent`
+</ResponseField>
+
+<ResponseField name="presence.firstMentionPosition" type="string" required>
+  Where the brand first appears: `top`, `middle`, `bottom`, or `absent`
+</ResponseField>
+
+#### Position
+
+Tracks the brand's ranking within the response.
+
+<ResponseField name="position.rankPosition" type="number | null" required>
+  Numerical rank (1 = first place, null if not ranked)
+</ResponseField>
+
+<ResponseField name="position.totalRanked" type="number | null" required>
+  Total number of brands ranked in the response
+</ResponseField>
+
+<ResponseField name="position.isTopPick" type="boolean" required>
+  Whether the brand is the #1 recommendation
+</ResponseField>
+
+<ResponseField name="position.isTopThree" type="boolean" required>
+  Whether the brand is in the top 3 recommendations
+</ResponseField>
+
+<ResponseField name="position.rankingContext" type="string | null" required>
+  Additional context about the ranking
+</ResponseField>
+
+#### Sentiment
+
+Evaluates how favorably the brand is portrayed.
+
+<ResponseField name="sentiment.score" type="number" required>
+  Sentiment score (-100 to 100)
+</ResponseField>
+
+<ResponseField name="sentiment.label" type="string" required>
+  Categorical label: `very_negative`, `negative`, `neutral`, `positive`, or `very_positive`
+</ResponseField>
+
+<ResponseField name="sentiment.positives" type="string[]" required>
+  Array of positive mentions or attributes
+</ResponseField>
+
+<ResponseField name="sentiment.negatives" type="string[]" required>
+  Array of negative mentions or criticisms
+</ResponseField>
+
+#### Recommendation
+
+Indicates how strongly the AI recommends the brand.
+
+<ResponseField name="recommendation.type" type="string" required>
+  Recommendation strength: `top_pick`, `strong_alternative`, `conditional`, `mentioned_only`, `discouraged`, or `not_mentioned`
+</ResponseField>
+
+<ResponseField name="recommendation.bestFor" type="string[]" required>
+  Use cases or scenarios where the brand is recommended
+</ResponseField>
+
+<ResponseField name="recommendation.caveats" type="string[]" required>
+  Limitations or conditions mentioned
+</ResponseField>
+
+#### Competitors
+
+Competitive landscape analysis.
+
+<ResponseField name="competitors" type="array" required>
+  Array of competitor analysis objects
+</ResponseField>
+
+<ResponseField name="competitors[].name" type="string" required>
+  Competitor brand name
+</ResponseField>
+
+<ResponseField name="competitors[].domain" type="string" required>
+  Competitor domain
+</ResponseField>
+
+<ResponseField name="competitors[].visibility" type="number" required>
+  Competitor's visibility score
+</ResponseField>
+
+<ResponseField name="competitors[].sentiment" type="number" required>
+  Competitor's sentiment score
+</ResponseField>
+
+<ResponseField name="competitors[].rankPosition" type="number | null" required>
+  Competitor's rank position (null if not ranked)
+</ResponseField>
+
+<ResponseField name="competitors[].isRecommended" type="boolean" required>
+  Whether the competitor is actively recommended
+</ResponseField>
+
+<ResponseField name="competitors[].winsOver" type="string[]" required>
+  Brands this competitor is positioned above
+</ResponseField>
+
+<ResponseField name="competitors[].losesTo" type="string[]" required>
+  Brands this competitor is positioned below
+</ResponseField>
+
+#### Perception
+
+How the brand is characterized and positioned.
+
+<ResponseField name="perception.coreClaims" type="string[]" required>
+  Main claims made about the brand
+</ResponseField>
+
+<ResponseField name="perception.differentiators" type="string[]" required>
+  Unique features or advantages highlighted
+</ResponseField>
+
+<ResponseField name="perception.bestKnownFor" type="string | null" required>
+  Primary association or specialty
+</ResponseField>
+
+<ResponseField name="perception.pricingPerception" type="string" required>
+  Price positioning: `premium`, `mid_range`, `budget`, `free`, or `not_mentioned`
+</ResponseField>
+
+#### Risks
+
+Issues that need attention.
+
+<ResponseField name="risks.hasRisks" type="boolean" required>
+  Whether any risks were identified
+</ResponseField>
+
+<ResponseField name="risks.items" type="array" required>
+  Array of risk items
+</ResponseField>
+
+<ResponseField name="risks.items[].type" type="string" required>
+  Risk category: `outdated_info`, `factual_error`, `brand_confusion`, `negative_association`, or `missing_from_response`
+</ResponseField>
+
+<ResponseField name="risks.items[].severity" type="string" required>
+  Risk severity: `critical`, `warning`, or `info`
+</ResponseField>
+
+<ResponseField name="risks.items[].detail" type="string" required>
+  Detailed description of the risk
+</ResponseField>
+
+#### Actions
+
+Recommended next steps for the brand.
+
+<ResponseField name="actions" type="array" required>
+  Array of actionable recommendations
+</ResponseField>
+
+<ResponseField name="actions[].priority" type="string" required>
+  Priority level: `critical`, `high`, `medium`, or `low`
+</ResponseField>
+
+<ResponseField name="actions[].recommendation" type="string" required>
+  The recommended action to take
+</ResponseField>
+
+### Usage Example
+
+```typescript
+const analysis: BrandAnalysisResult = {
+  geoScore: {
+    overall: 85,
+    verdict: "Strong presence with positive sentiment"
+  },
+  presence: {
+    mentioned: true,
+    mentionCount: 3,
+    visibility: 90,
+    prominence: "significant",
+    firstMentionPosition: "top"
+  },
+  position: {
+    rankPosition: 2,
+    totalRanked: 5,
+    isTopPick: false,
+    isTopThree: true,
+    rankingContext: "Listed as a top alternative"
+  },
+  sentiment: {
+    score: 75,
+    label: "positive",
+    positives: ["User-friendly", "Comprehensive analytics"],
+    negatives: []
+  },
+  recommendation: {
+    type: "strong_alternative",
+    bestFor: ["Enterprise teams", "Advanced analytics needs"],
+    caveats: ["Premium pricing"]
+  },
+  competitors: [
+    {
+      name: "CompetitorA",
+      domain: "competitora.com",
+      visibility: 95,
+      sentiment: 80,
+      rankPosition: 1,
+      isRecommended: true,
+      winsOver: ["OneGlance"],
+      losesTo: []
+    }
+  ],
+  perception: {
+    coreClaims: ["AI-powered analytics", "Real-time insights"],
+    differentiators: ["Multi-model analysis"],
+    bestKnownFor: "Brand visibility tracking",
+    pricingPerception: "mid_range"
+  },
+  risks: {
+    hasRisks: false,
+    items: []
+  },
+  actions: [
+    {
+      priority: "high",
+      recommendation: "Emphasize unique differentiators in marketing content"
+    }
+  ]
+};
+```
+
+**Used in:**
+- `packages/services/src/analysis/runAnalysis.ts:8` - Analysis generation
+- `packages/services/src/analysis/fetchAnalysedPrompts.ts:4` - Data retrieval
+- `apps/web/src/app/(auth)/dashboard/_hooks/use-dashboard-data.ts:1` - Dashboard data processing
+
+---
+
+## AnalysisModelInput
+
+Input structure for model-specific analysis.
+
+```typescript
+interface AnalysisModelInput {
+  model_provider: string;
+  response: string;
+}
+```
+
+<ResponseField name="model_provider" type="string" required>
+  The AI model provider identifier (e.g., "chatgpt", "claude")
+</ResponseField>
+
+<ResponseField name="response" type="string" required>
+  The response text from the model
+</ResponseField>
+
+### Usage
+
+```typescript
+const input: AnalysisModelInput = {
+  model_provider: "claude",
+  response: "OneGlance provides comprehensive AI analytics..."
+};
+```
+
+---
+
+## PromptAnalysis
+
+Database representation of a prompt analysis stored in ClickHouse.
+
+```typescript
+interface PromptAnalysis {
+  id: string;
+  prompt_id: string;
+  workspace_id: string;
+  user_id: string;
+  model_provider: string;
+  prompt: string;
+  brand_analysis: string;
+  prompt_run_at: string;
+  created_at: string;
+}
+```
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the analysis record
+</ResponseField>
+
+<ResponseField name="prompt_id" type="string" required>
+  References the prompt that was analyzed
+</ResponseField>
+
+<ResponseField name="workspace_id" type="string" required>
+  Workspace context identifier
+</ResponseField>
+
+<ResponseField name="user_id" type="string" required>
+  User who created the prompt
+</ResponseField>
+
+<ResponseField name="model_provider" type="string" required>
+  AI model provider that generated the response
+</ResponseField>
+
+<ResponseField name="prompt" type="string" required>
+  The original prompt text (stored for convenience)
+</ResponseField>
+
+<ResponseField name="brand_analysis" type="string" required>
+  Complete `BrandAnalysisResult` serialized as JSON string
+</ResponseField>
+
+<ResponseField name="prompt_run_at" type="string" required>
+  ISO 8601 timestamp when the prompt was executed
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  ISO 8601 timestamp when the analysis was created
+</ResponseField>
+
+### Usage
+
+This type represents the persisted structure in ClickHouse:
+
+```typescript
+const stored: PromptAnalysis = {
+  id: "analysis_123",
+  prompt_id: "prompt_456",
+  workspace_id: "ws_789",
+  user_id: "user_012",
+  model_provider: "claude",
+  prompt: "What are the best AI tools?",
+  brand_analysis: JSON.stringify(brandAnalysisResult),
+  prompt_run_at: "2026-03-04T10:00:00Z",
+  created_at: "2026-03-04T10:05:00Z"
+};
+```
+
+---
+
+## AnalysisRecord
+
+Flattened analysis record structure optimized for filtering and display.
+
+```typescript
+interface AnalysisRecord {
+  // Identifiers
+  id: string;
+  prompt_id: string;
+  prompt_run_at: string;
+  prompt: string;
+
+  // User context
+  user_id: string;
+  workspace_id: string;
+
+  // Model info
+  model_provider: string;
+
+  // Response data
+  response: string;
+  sources: Source[];
+
+  // Analysis data
+  brand_analysis?: BrandAnalysisResult;
+
+  // Analysis status
+  is_analysed?: boolean;
+
+  // Timestamps
+  created_at: string;
+}
+```
+
+<ResponseField name="id" type="string" required>
+  Unique record identifier
+</ResponseField>
+
+<ResponseField name="prompt_id" type="string" required>
+  References the prompt
+</ResponseField>
+
+<ResponseField name="prompt_run_at" type="string" required>
+  When the prompt was executed
+</ResponseField>
+
+<ResponseField name="prompt" type="string" required>
+  The prompt text
+</ResponseField>
+
+<ResponseField name="user_id" type="string" required>
+  User identifier
+</ResponseField>
+
+<ResponseField name="workspace_id" type="string" required>
+  Workspace identifier
+</ResponseField>
+
+<ResponseField name="model_provider" type="string" required>
+  AI model provider name
+</ResponseField>
+
+<ResponseField name="response" type="string" required>
+  The AI-generated response text
+</ResponseField>
+
+<ResponseField name="sources" type="Source[]" required>
+  Array of sources cited in the response
+</ResponseField>
+
+<ResponseField name="brand_analysis" type="BrandAnalysisResult">
+  Parsed analysis object (only present if analyzed)
+</ResponseField>
+
+<ResponseField name="is_analysed" type="boolean">
+  True if the record has been analyzed, false if it's a raw response
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  ISO 8601 timestamp of record creation
+</ResponseField>
+
+### Usage
+
+```typescript
+const record: AnalysisRecord = {
+  id: "rec_123",
+  prompt_id: "prompt_456",
+  prompt_run_at: "2026-03-04T10:00:00Z",
+  prompt: "What are the best AI analytics platforms?",
+  user_id: "user_789",
+  workspace_id: "ws_012",
+  model_provider: "claude",
+  response: "OneGlance is a leading platform...",
+  sources: [],
+  brand_analysis: { /* ... */ },
+  is_analysed: true,
+  created_at: "2026-03-04T10:05:00Z"
+};
+```
+
+**Used in:**
+- `packages/utils/src/export/buildAnalysisCsvRow.ts:1` - CSV export functionality
+- `packages/utils/src/analysis/filterAnalysisRecords.ts:1` - Filtering operations
+- `apps/web/src/app/(auth)/prompts/page.tsx:5` - Prompts page display
+- `apps/web/src/app/(auth)/dashboard/page.tsx:5` - Dashboard display
+- `apps/web/src/app/(auth)/dashboard/_hooks/use-dashboard-data.ts:1` - Data hooks
+
+---
+
+## AnalysisMetadata
+
+Metadata about available filters in the analysis dataset.
+
+```typescript
+interface AnalysisMetadata {
+  available_brands: Array<{
+    name: string;
+    website: string;
+  }>;
+  available_models: string[];
+}
+```
+
+<ResponseField name="available_brands" type="array" required>
+  List of brands that have analysis data
+</ResponseField>
+
+<ResponseField name="available_brands[].name" type="string" required>
+  Brand name
+</ResponseField>
+
+<ResponseField name="available_brands[].website" type="string" required>
+  Brand website URL
+</ResponseField>
+
+<ResponseField name="available_models" type="string[]" required>
+  List of AI model providers with available data
+</ResponseField>
+
+### Usage
+
+```typescript
+const metadata: AnalysisMetadata = {
+  available_brands: [
+    { name: "OneGlance", website: "https://oneglance.ai" },
+    { name: "CompetitorA", website: "https://competitora.com" }
+  ],
+  available_models: ["chatgpt", "claude", "gemini"]
+};
+```
+
+---
+
+## AnalysisResponse
+
+Complete response object containing analysis records and metadata.
+
+```typescript
+interface AnalysisResponse {
+  records: AnalysisRecord[];
+  metadata: AnalysisMetadata;
+}
+```
+
+<ResponseField name="records" type="AnalysisRecord[]" required>
+  Array of analysis records
+</ResponseField>
+
+<ResponseField name="metadata" type="AnalysisMetadata" required>
+  Metadata about available filters and options
+</ResponseField>
+
+### Usage
+
+```typescript
+const response: AnalysisResponse = {
+  records: [
+    { /* AnalysisRecord */ }
+  ],
+  metadata: {
+    available_brands: [{ name: "OneGlance", website: "https://oneglance.ai" }],
+    available_models: ["chatgpt", "claude"]
+  }
+};
+```
+
+---
+
+## AnalysisRow
+
+Legacy analysis row structure with brand metrics.
+
+```typescript
+interface AnalysisRow {
+  id: string;
+  prompt_id: string;
+  prompt_run_at: string;
+  user_id: string;
+  workspace_id: string;
+  model_provider: string;
+  response: string;
+  brand_metrics: string | BrandMetricMap;
+  sources: Source[];
+  created_at: string;
+}
+```
+
+<ResponseField name="id" type="string" required>
+  Unique row identifier
+</ResponseField>
+
+<ResponseField name="prompt_id" type="string" required>
+  Associated prompt ID
+</ResponseField>
+
+<ResponseField name="prompt_run_at" type="string" required>
+  Prompt execution timestamp
+</ResponseField>
+
+<ResponseField name="user_id" type="string" required>
+  User identifier
+</ResponseField>
+
+<ResponseField name="workspace_id" type="string" required>
+  Workspace identifier
+</ResponseField>
+
+<ResponseField name="model_provider" type="string" required>
+  AI model provider
+</ResponseField>
+
+<ResponseField name="response" type="string" required>
+  AI response text
+</ResponseField>
+
+<ResponseField name="brand_metrics" type="string | BrandMetricMap" required>
+  Brand metrics as JSON string or parsed object. See `BrandMetricMap` in metrics types.
+</ResponseField>
+
+<ResponseField name="sources" type="Source[]" required>
+  Source citations
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  Record creation timestamp
+</ResponseField>
+
+---
+
+## Related Types
+
+- [Agent Types](/api/types/agent) - Provider types and agent results
+- [Entity Types](/api/types/entities) - Competitor input structures

@@ -1,0 +1,743 @@
+---
+title: Adding a New AI Provider
+description: Step-by-step guide to integrate a new AI provider into OneGlanse's tracking system
+---
+
+## Overview
+
+OneGlanse tracks brand mentions across multiple AI providers (ChatGPT, Claude, Gemini, Perplexity, AI Overview). Adding a new provider involves:
+
+1. Creating a provider configuration
+2. Implementing response extraction logic
+3. Implementing source citation extraction
+4. Registering the provider
+5. Testing the integration
+
+This guide walks through the entire process with real examples from the codebase.
+
+## Provider Architecture
+
+All provider behavior is declared in a single `ProviderConfig` interface located at:
+
+```
+apps/agent/src/core/providers/types.ts
+```
+
+### The ProviderConfig Interface
+
+```typescript
+export interface ProviderConfig {
+  /** Landing URL the browser navigates to before sending prompts. */
+  url: string;
+  
+  /** Milliseconds to wait after the page loads before the first prompt. */
+  warmupDelayMs: number;
+  
+  /** Short identifier used in logs (e.g. "ChatGPT"). */
+  label: string;
+  
+  /** Human-readable product name shown in the UI (e.g. "ChatGPT"). */
+  displayName: string;
+  
+  /** Set true to skip this provider in all job runs. */
+  skip?: boolean;
+  
+  /** Whether to run the editor warm-up sequence before the first prompt. */
+  requiresWarmup: boolean;
+  
+  /** Waits until the AI response is fully generated and ready to read. */
+  waitForResponse: (page: Page) => Promise<void>;
+  
+  /** Reads the AI response from the page and returns it as markdown. */
+  extractResponse: (page: Page) => Promise<string>;
+  
+  /** Called before each retry attempt — e.g. navigate back to a clean state. */
+  beforeRetryHook?: (page: Page) => Promise<void>;
+  
+  /** Called between consecutive prompts — e.g. reset the page to its initial state. */
+  betweenPromptsHook?: (page: Page) => Promise<void>;
+  
+  /**
+   * Provider-specific check for whether a prompt was submitted successfully.
+   * Return true/false to short-circuit; return undefined to fall through to generic checks.
+   */
+  checkSubmitSuccess?: (page: Page, preSubmitUrl: string) => Promise<boolean | undefined>;
+  
+  /** Runs before the browser navigates to the provider URL. */
+  preNavigationHook?: (page: Page) => Promise<void>;
+  
+  /** Runs after the browser lands on the provider URL. */
+  postNavigationHook?: (page: Page) => Promise<void>;
+  
+  /** Extracts citation sources from the page after the response is read. */
+  extractSources: (page: Page) => Promise<Source[]>;
+}
+```
+
+All imports use Playwright's `Page` type from `playwright` and `Source` type from `@oneglanse/types`.
+
+## Step-by-Step: Adding a Provider
+
+Let's add a hypothetical provider called "Llama" as an example.
+
+<Steps>
+
+### Create the provider directory
+
+Create a new folder in the providers directory:
+
+```bash
+mkdir apps/agent/src/core/providers/llama
+```
+
+### Create the main config file
+
+Create `apps/agent/src/core/providers/llama/index.ts`:
+
+```typescript
+import { extractAssistantMarkdown } from "../../../lib/input/markdown/toMarkdown.js";
+import { waitForAssistantToFinish } from "../../../lib/input/response/waitForFinish.js";
+import type { ProviderConfig } from "../types.js";
+import { extractSourcesFromLlama } from "./lib/extractSources.js";
+
+export const llamaConfig: ProviderConfig = {
+  url: "https://llama.ai/chat",
+  warmupDelayMs: 5000,
+  label: "Llama",
+  displayName: "Llama",
+  requiresWarmup: true,
+  waitForResponse: (page) => waitForAssistantToFinish(page, "llama"),
+  extractResponse: (page) => extractAssistantMarkdown(page, "llama"),
+  extractSources: async (page) => extractSourcesFromLlama(page),
+};
+```
+
+**Key fields to configure:**
+
+- `url` - The provider's chat interface URL
+- `warmupDelayMs` - How long to wait after navigation (usually 5000ms)
+- `label` & `displayName` - Provider identification
+- `requiresWarmup` - Set `true` to clear the editor before first use
+- `waitForResponse` - Reuse shared helper or create custom logic
+- `extractResponse` - Reuse shared markdown extractor or write custom
+- `extractSources` - Custom source extraction (covered below)
+
+### Implement source extraction (simple case)
+
+If the provider doesn't have sources, create `apps/agent/src/core/providers/llama/lib/extractSources.ts`:
+
+```typescript
+import type { Source } from "@oneglanse/types";
+import type { Page } from "playwright";
+
+export async function extractSourcesFromLlama(
+  _page: Page
+): Promise<Source[]> {
+  // This provider doesn't provide sources
+  return [];
+}
+```
+
+See **Claude's implementation** at `apps/agent/src/core/providers/claude/index.ts:14` for this pattern.
+
+### Implement source extraction (with sources button)
+
+If the provider has a sources button that opens a panel, create:
+
+`apps/agent/src/core/providers/llama/lib/extractSources.ts`:
+
+```typescript
+import type { Source } from "@oneglanse/types";
+import { SELECTORS } from "@oneglanse/utils";
+import type { Locator, Page } from "playwright";
+import {
+  type RawSource,
+  buildSources,
+  clickButtonViaDispatch,
+} from "../../_shared/sourceUtils.js";
+
+export async function extractSourcesFromLlama(
+  page: Page,
+  sourcesButton: Locator
+): Promise<Source[]> {
+  // Extract raw source data from the page DOM
+  const rawSources = (await page.evaluate((sels) => {
+    const results: Array<{
+      rawHref: string;
+      title: string;
+      citedText: string;
+      imgSrc: string | null;
+    }> = [];
+
+    // Find the sources panel/flyout
+    const flyout = document.querySelector('[data-testid="sources-panel"]');
+    if (!flyout) return results;
+
+    // Query all source links
+    const anchors = flyout.querySelectorAll<HTMLAnchorElement>('a[href]');
+
+    for (const a of Array.from(anchors)) {
+      let href = a.getAttribute("href");
+      if (!href) continue;
+
+      try {
+        // Normalize URL
+        href = new URL(href, location.origin).toString();
+        href = href.replace(/#.*$/, "") ?? "";
+      } catch {
+        continue;
+      }
+
+      const title = a.querySelector('.source-title')?.textContent?.trim() || "";
+      const citedText = a.querySelector('.citation-text')?.textContent?.trim() || "";
+      const imgSrc = a.querySelector('img')?.getAttribute('src') ?? null;
+
+      results.push({ rawHref: href, title, citedText, imgSrc });
+    }
+
+    return results;
+  }, SELECTORS.llama)) as RawSource[];
+
+  // Close the sources panel
+  if (!(await clickButtonViaDispatch(page, sourcesButton))) return [];
+  await page.waitForTimeout(300);
+
+  // Convert raw sources to typed Source objects with deduplication
+  return buildSources(rawSources);
+}
+```
+
+Then update `index.ts` to use the sources button helpers:
+
+```typescript
+import { openSourcesPanel } from "../../../lib/input/sources/openPanel.js";
+import { findSourcesButton } from "../../../lib/input/sources/findButton.js";
+import { extractSourcesFromLlama } from "./lib/extractSources.js";
+
+export const llamaConfig: ProviderConfig = {
+  // ... other config
+  extractSources: async (page) => {
+    const btn = await findSourcesButton(page);
+    if (!btn) return [];
+    await openSourcesPanel(page, btn);
+    return extractSourcesFromLlama(page, btn);
+  },
+};
+```
+
+See **ChatGPT's implementation** at `apps/agent/src/core/providers/chatgpt/index.ts:16-21` for this pattern.
+
+### Add provider to the type system
+
+Edit `packages/types/src/types/agent.ts` and add your provider to the list:
+
+```typescript
+export const PROVIDER_LIST = [
+  "chatgpt",
+  "claude",
+  "perplexity",
+  "gemini",
+  "ai-overview",
+  "llama", // Add your provider here
+] as const;
+
+export type Provider = (typeof PROVIDER_LIST)[number];
+```
+
+This makes `"llama"` a valid provider throughout the type system.
+
+### Register the provider config
+
+Edit `apps/agent/src/core/providers/index.ts`:
+
+```typescript
+import type { Provider } from "@oneglanse/types";
+import { aiOverviewConfig } from "./ai-overview/index.js";
+import { chatgptConfig } from "./chatgpt/index.js";
+import { claudeConfig } from "./claude/index.js";
+import { geminiConfig } from "./gemini/index.js";
+import { perplexityConfig } from "./perplexity/index.js";
+import { llamaConfig } from "./llama/index.js"; // Import your config
+import type { ProviderConfig } from "./types.js";
+
+export const PROVIDER_CONFIGS: Record<Provider, ProviderConfig> = {
+  gemini: geminiConfig,
+  chatgpt: chatgptConfig,
+  perplexity: perplexityConfig,
+  claude: claudeConfig,
+  "ai-overview": aiOverviewConfig,
+  llama: llamaConfig, // Add to the map
+};
+```
+
+That's it! The system will automatically pick up your provider.
+
+</Steps>
+
+## Real Examples from the Codebase
+
+### Example 1: Claude (No Sources)
+
+The simplest provider implementation at `apps/agent/src/core/providers/claude/index.ts`:
+
+```typescript
+import { extractAssistantMarkdown } from "../../../lib/input/markdown/toMarkdown.js";
+import { waitForAssistantToFinish } from "../../../lib/input/response/waitForFinish.js";
+import type { ProviderConfig } from "../types.js";
+
+export const claudeConfig: ProviderConfig = {
+  url: "https://claude.ai/new",
+  warmupDelayMs: 5000,
+  skip: true, // Currently disabled
+  label: "Claude",
+  displayName: "Claude",
+  requiresWarmup: true,
+  waitForResponse: (page) => waitForAssistantToFinish(page, "claude"),
+  extractResponse: (page) => extractAssistantMarkdown(page, "claude"),
+  extractSources: async (_page) => [], // No sources
+};
+```
+
+### Example 2: Gemini (With Sources)
+
+A provider with source extraction at `apps/agent/src/core/providers/gemini/index.ts`:
+
+```typescript
+import { extractSourcesFromGemini } from "./lib/extractSources.js";
+import { extractAssistantMarkdown } from "../../../lib/input/markdown/toMarkdown.js";
+import { openSourcesPanel } from "../../../lib/input/sources/openPanel.js";
+import { findSourcesButton } from "../../../lib/input/sources/findButton.js";
+import { waitForAssistantToFinish } from "../../../lib/input/response/waitForFinish.js";
+import type { ProviderConfig } from "../types.js";
+
+export const geminiConfig: ProviderConfig = {
+  url: "https://gemini.google.com/",
+  warmupDelayMs: 5000,
+  label: "Gemini",
+  displayName: "Gemini",
+  requiresWarmup: true,
+  waitForResponse: (page) => waitForAssistantToFinish(page, "gemini"),
+  extractResponse: (page) => extractAssistantMarkdown(page, "gemini"),
+  extractSources: async (page) => {
+    const btn = await findSourcesButton(page);
+    if (!btn) return [];
+    await openSourcesPanel(page, btn);
+    return extractSourcesFromGemini(page, btn);
+  },
+};
+```
+
+### Example 3: Perplexity (With Post-Navigation Hook)
+
+A provider with custom navigation behavior at `apps/agent/src/core/providers/perplexity/index.ts`:
+
+```typescript
+import { extractSourcesFromPerplexity } from "./lib/extractSources.js";
+import { extractAssistantMarkdown } from "../../../lib/input/markdown/toMarkdown.js";
+import { openSourcesPanel } from "../../../lib/input/sources/openPanel.js";
+import { findSourcesButton } from "../../../lib/input/sources/findButton.js";
+import { waitForAssistantToFinish } from "../../../lib/input/response/waitForFinish.js";
+import type { ProviderConfig } from "../types.js";
+
+export const perplexityConfig: ProviderConfig = {
+  url: "https://www.perplexity.ai/",
+  warmupDelayMs: 5000,
+  label: "Perplexity",
+  displayName: "Perplexity",
+  requiresWarmup: true,
+  waitForResponse: (page) => waitForAssistantToFinish(page, "perplexity"),
+  extractResponse: (page) => extractAssistantMarkdown(page, "perplexity"),
+  postNavigationHook: async (page) => {
+    // Perplexity loads slowly — add a randomised delay to avoid bot detection.
+    const randomDelay = 2000 + Math.floor(Math.random() * 3000);
+    await page.waitForTimeout(randomDelay);
+    await page.waitForTimeout(1000 + Math.floor(Math.random() * 1000));
+  },
+  extractSources: async (page) => {
+    const btn = await findSourcesButton(page);
+    if (!btn) return [];
+    await openSourcesPanel(page, btn);
+    return extractSourcesFromPerplexity(page);
+  },
+};
+```
+
+## Understanding Source Extraction
+
+### The Source Type
+
+Defined in `packages/types/src/types/sources.ts`:
+
+```typescript
+export interface Source {
+  title: string;
+  cited_text: string;
+  url: string;
+  domain: string | null;
+  favicon?: string | null;
+}
+```
+
+### The RawSource Type
+
+Before processing, sources are extracted as `RawSource` from the DOM:
+
+```typescript
+export type RawSource = {
+  rawHref: string;      // Absolute URL from page
+  title: string;        // Link title or heading
+  citedText: string;    // Quoted excerpt from source
+  imgSrc: string | null; // Favicon or thumbnail URL
+};
+```
+
+### The buildSources Helper
+
+Converts raw sources to typed `Source[]` with normalization and deduplication.
+
+Defined at `apps/agent/src/lib/extraction/sourceUtils.ts:28-54`:
+
+```typescript
+export function buildSources(
+  rawSources: RawSource[],
+  keyFn: (url: string, title: string, citedText: string) => string = (
+    url,
+    title,
+  ) => `${url}|${title}`,
+): Source[] {
+  const seen = new Set<string>();
+  const results: Source[] = [];
+
+  for (const { rawHref, title: rawTitle, citedText, imgSrc } of rawSources) {
+    const url = rawHref.replace(/#.*$/, ""); // Strip fragments
+    if (!url) continue;
+
+    const domain = getDomain(url) || null;
+    const title = rawTitle || domain || url;
+    const favicon = imgSrc ?? getFaviconUrls(domain ?? "")?.[0] ?? null;
+
+    const key = keyFn(url, title, citedText);
+    if (seen.has(key)) continue; // Deduplicate
+    seen.add(key);
+
+    results.push({ title, cited_text: citedText, url, domain, favicon });
+  }
+
+  return results;
+}
+```
+
+**Deduplication strategies:**
+
+```typescript
+// Default: dedupe by URL + title
+buildSources(rawSources)
+
+// Dedupe by URL only (for ai-overview)
+buildSources(rawSources, (url) => url)
+
+// Dedupe by URL + title + cited text (for ChatGPT)
+buildSources(rawSources, (url, title, citedText) => `${url}|${title}|${citedText}`)
+```
+
+### The clickButtonViaDispatch Helper
+
+Closes flyouts/panels by dispatching a synthetic click event.
+
+Defined at `apps/agent/src/lib/extraction/sourceUtils.ts:63-84`:
+
+```typescript
+export async function clickButtonViaDispatch(
+  page: Page,
+  button: Locator,
+): Promise<boolean> {
+  const handle = await button.elementHandle();
+  if (!handle) return false;
+
+  await page.evaluate((el) => {
+    if (el instanceof HTMLElement) {
+      el.dispatchEvent(
+        new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          view: window,
+        }),
+      );
+    }
+  }, handle);
+
+  return true;
+}
+```
+
+## Testing Your Provider
+
+<Steps>
+
+### Local development testing
+
+1. Start the agent in development mode:
+
+```bash
+pnpm dev:agent
+```
+
+2. Enable debug mode in `apps/agent/.env`:
+
+```bash
+DEBUG_ENABLED=true
+```
+
+3. Submit a test job through the web UI or directly via BullMQ
+
+### Manual browser testing
+
+Test Playwright selectors interactively:
+
+```bash
+cd apps/agent
+pnpm exec playwright codegen https://llama.ai/chat
+```
+
+This opens a browser with Playwright Inspector to:
+- Record interactions
+- Generate selectors
+- Test element queries
+- Verify DOM structure
+
+### Debugging tips
+
+Add logging to your extraction functions:
+
+```typescript
+import { logger } from "@oneglanse/utils";
+
+export async function extractSourcesFromLlama(page: Page): Promise<Source[]> {
+  logger.log("[llama] Starting source extraction");
+  
+  const rawSources = await page.evaluate(() => {
+    const results = [];
+    // ... extraction logic
+    console.log(`Found ${results.length} sources`);
+    return results;
+  });
+  
+  logger.log(`[llama] Extracted ${rawSources.length} raw sources`);
+  return buildSources(rawSources);
+}
+```
+
+### Type checking
+
+Ensure your provider compiles:
+
+```bash
+pnpm typecheck
+```
+
+If you added the provider to `PROVIDER_LIST`, TypeScript will enforce that it's registered in `PROVIDER_CONFIGS`.
+
+</Steps>
+
+## Advanced Configuration
+
+### Custom response waiting
+
+If the shared `waitForAssistantToFinish` doesn't work for your provider:
+
+```typescript
+export const llamaConfig: ProviderConfig = {
+  // ...
+  waitForResponse: async (page) => {
+    // Wait for typing indicator to disappear
+    await page.waitForSelector('[data-testid="typing-indicator"]', {
+      state: 'hidden',
+      timeout: 60000,
+    });
+    
+    // Wait for "Copy" button to appear
+    await page.waitForSelector('button[aria-label="Copy response"]', {
+      state: 'visible',
+      timeout: 5000,
+    });
+  },
+};
+```
+
+### Custom response extraction
+
+If the markdown extractor doesn't work:
+
+```typescript
+export const llamaConfig: ProviderConfig = {
+  // ...
+  extractResponse: async (page) => {
+    const responseText = await page.evaluate(() => {
+      const container = document.querySelector('[data-testid="response-container"]');
+      return container?.textContent?.trim() || "";
+    });
+    
+    if (!responseText) {
+      throw new Error("Failed to extract response");
+    }
+    
+    return responseText;
+  },
+};
+```
+
+### Between-prompts hook
+
+Reset the UI state between consecutive prompts:
+
+```typescript
+export const llamaConfig: ProviderConfig = {
+  // ...
+  betweenPromptsHook: async (page) => {
+    // Click "New Chat" button
+    const newChatBtn = await page.locator('button[aria-label="New chat"]').first();
+    if (newChatBtn) {
+      await newChatBtn.click();
+      await page.waitForTimeout(2000);
+    }
+  },
+};
+```
+
+### Before-retry hook
+
+Recover from errors before retrying:
+
+```typescript
+export const llamaConfig: ProviderConfig = {
+  // ...
+  beforeRetryHook: async (page) => {
+    // Dismiss any error modals
+    const dismissBtn = await page.locator('button:has-text("Dismiss")').first();
+    if (dismissBtn) {
+      await dismissBtn.click().catch(() => {});
+    }
+    
+    // Navigate back to clean state
+    await page.goto('https://llama.ai/chat');
+  },
+};
+```
+
+## Common Pitfalls
+
+### Bot detection
+
+Some providers detect automation. Mitigate with:
+
+```typescript
+postNavigationHook: async (page) => {
+  // Random delays
+  const delay = 2000 + Math.floor(Math.random() * 3000);
+  await page.waitForTimeout(delay);
+},
+```
+
+### Dynamic selectors
+
+Avoid brittle CSS class names. Prefer:
+- `data-testid` attributes
+- `aria-label` attributes
+- Semantic HTML elements
+- Text content matching
+
+### Timeout errors
+
+If responses take a long time:
+
+```typescript
+waitForResponse: async (page) => {
+  await page.waitForSelector('.response-done', {
+    timeout: 120000, // 2 minutes
+  });
+},
+```
+
+### Empty sources
+
+If sources don't extract, check:
+1. Is the sources button clicked?
+2. Is the panel fully loaded?
+3. Are selectors correct?
+4. Add debug logging:
+
+```typescript
+const html = await page.content();
+logger.log("Page HTML:", html);
+```
+
+## Submitting Your Provider
+
+<Steps>
+
+### Prepare your changes
+
+Ensure your provider:
+- Implements all required `ProviderConfig` fields
+- Extracts responses as markdown or plain text
+- Extracts sources (or returns `[]` if not applicable)
+- Passes type checking
+- Includes descriptive comments
+
+### Test thoroughly
+
+Run multiple prompts:
+- Short prompts
+- Long prompts
+- Prompts with multiple sources
+- Prompts with no sources
+- Edge cases (errors, timeouts)
+
+### Document provider-specific quirks
+
+Add comments explaining:
+- Why custom hooks are needed
+- Selector choices
+- Timing delays
+- Bot detection workarounds
+
+### Create a pull request
+
+Follow the [Contributing Guide](/development/contributing) to:
+1. Fork the repository
+2. Create a feature branch: `feature/add-llama-provider`
+3. Commit your changes
+4. Push and open a PR
+
+**PR checklist:**
+- [ ] Provider added to `PROVIDER_LIST` in `packages/types/src/types/agent.ts`
+- [ ] Provider config exported from `apps/agent/src/core/providers/llama/index.ts`
+- [ ] Provider registered in `apps/agent/src/core/providers/index.ts`
+- [ ] Source extraction implemented (or returns `[]`)
+- [ ] Code passes `pnpm typecheck`
+- [ ] Code formatted with `pnpm lint:fix`
+- [ ] Tested locally with multiple prompts
+
+</Steps>
+
+## Need Help?
+
+If you get stuck:
+
+1. Review existing provider implementations:
+   - **Simple**: `apps/agent/src/core/providers/claude/`
+   - **Moderate**: `apps/agent/src/core/providers/gemini/`
+   - **Complex**: `apps/agent/src/core/providers/chatgpt/`
+
+2. Check shared utilities:
+   - `apps/agent/src/lib/input/` - Input/editor helpers
+   - `apps/agent/src/lib/extraction/` - Source extraction utilities
+   - `apps/agent/src/core/steps/` - Prompt execution pipeline
+
+3. Ask for help:
+   - Open a [GitHub Discussion](https://github.com/yourusername/oneglanse/discussions)
+   - Comment on related issues
+   - Join the community chat
+
+Welcome to provider development! Your contribution helps track brand visibility across more AI platforms.

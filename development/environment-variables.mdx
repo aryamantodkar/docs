@@ -1,0 +1,597 @@
+---
+title: 'Environment Variables'
+description: 'Complete reference for all environment variables in OneGlance'
+---
+
+OneGlance uses environment variables to configure services across the monorepo. This guide documents all available variables, their purpose, and configuration.
+
+## Configuration Files
+
+Environment variables are stored in two locations:
+
+- **`.env`** (root) - Shared variables for web app, infrastructure, and Docker Compose
+- **`apps/agent/.env`** - Agent-specific variables (worker configuration, proxies)
+
+<Warning>
+  Never commit `.env` files to version control. The `.env.example` files are provided as templates.
+</Warning>
+
+## Quick Setup
+
+Create environment files from examples:
+
+```bash
+cp .env.example .env
+cp apps/agent/.env.example apps/agent/.env
+```
+
+## Database Configuration
+
+Variables for PostgreSQL and ClickHouse database connections.
+
+<ParamField path="DATABASE_URL" type="string" required>
+  PostgreSQL connection string for the main application database.
+
+  **Format**: `postgresql://[user]:[password]@[host]:[port]/[database]`
+
+  **Example (local)**:
+  ```bash
+  DATABASE_URL=postgresql://user:password@localhost:5432/mydb
+  ```
+
+  **Example (Docker)**:
+  ```bash
+  DATABASE_URL=postgresql://user:password@db:5432/mydb
+  ```
+
+  <Note>
+    Use `localhost` for local development. Use service names (`db`) when running in Docker Compose.
+  </Note>
+</ParamField>
+
+<ParamField path="POSTGRES_USER" type="string" required>
+  PostgreSQL username. Must match the username in `DATABASE_URL`.
+
+  **Default**: `user`
+
+  ```bash
+  POSTGRES_USER=user
+  ```
+</ParamField>
+
+<ParamField path="POSTGRES_PASSWORD" type="string" required>
+  PostgreSQL password. Must match the password in `DATABASE_URL`.
+
+  ```bash
+  POSTGRES_PASSWORD=your_secure_password
+  ```
+
+  <Warning>
+    Use a strong password in production. Generate with: `openssl rand -base64 32`
+  </Warning>
+</ParamField>
+
+<ParamField path="POSTGRES_DB" type="string" required>
+  PostgreSQL database name. Must match the database in `DATABASE_URL`.
+
+  **Default**: `mydb`
+
+  ```bash
+  POSTGRES_DB=mydb
+  ```
+</ParamField>
+
+<ParamField path="CLICKHOUSE_URL" type="string" required>
+  ClickHouse HTTP interface URL for analytics data.
+
+  **Example (local)**:
+  ```bash
+  CLICKHOUSE_URL=http://localhost:8123
+  ```
+
+  **Example (Docker)**:
+  ```bash
+  CLICKHOUSE_URL=http://clickhouse:8123
+  ```
+</ParamField>
+
+<ParamField path="CLICKHOUSE_DB" type="string" required>
+  ClickHouse database name for analytics tables.
+
+  **Default**: `analytics`
+
+  ```bash
+  CLICKHOUSE_DB=analytics
+  ```
+</ParamField>
+
+<ParamField path="CLICKHOUSE_USER" type="string" required>
+  ClickHouse username for authentication.
+
+  **Default**: `default`
+
+  ```bash
+  CLICKHOUSE_USER=default
+  ```
+</ParamField>
+
+<ParamField path="CLICKHOUSE_PASSWORD" type="string" required>
+  ClickHouse password for authentication.
+
+  ```bash
+  CLICKHOUSE_PASSWORD=your_secure_password
+  ```
+
+  <Warning>
+    Use a strong password in production.
+  </Warning>
+</ParamField>
+
+## Application URLs
+
+Variables for configuring application URLs and routing.
+
+<ParamField path="APP_URL" type="string" required>
+  Internal server-side URL for the web application.
+
+  **Local development**:
+  ```bash
+  APP_URL=http://localhost:3000
+  ```
+
+  **Docker (internal)**:
+  ```bash
+  APP_URL=http://web:3000
+  ```
+
+  <Note>
+    This URL is used for server-to-server communication within the Docker network.
+  </Note>
+</ParamField>
+
+<ParamField path="API_BASE_URL" type="string" required>
+  Base URL for internal API calls. Typically same as `APP_URL`.
+
+  ```bash
+  API_BASE_URL=http://web:3000
+  ```
+</ParamField>
+
+<ParamField path="BETTER_AUTH_URL" type="string" required>
+  Public-facing URL for Better Auth callbacks (client-side).
+
+  **Development**:
+  ```bash
+  BETTER_AUTH_URL=http://localhost:3000
+  ```
+
+  **Production**:
+  ```bash
+  BETTER_AUTH_URL=https://app.yourdomain.com
+  ```
+
+  <Warning>
+    This must be the external URL accessible from user browsers, not the internal Docker URL.
+  </Warning>
+</ParamField>
+
+<ParamField path="NEXT_PUBLIC_API_URL" type="string" required>
+  Public API URL exposed to the browser (Next.js public env var).
+
+  **Development**:
+  ```bash
+  NEXT_PUBLIC_API_URL=http://localhost:3000
+  ```
+
+  **Production**:
+  ```bash
+  NEXT_PUBLIC_API_URL=https://app.yourdomain.com
+  ```
+
+  <Note>
+    Variables prefixed with `NEXT_PUBLIC_` are exposed to the browser.
+  </Note>
+</ParamField>
+
+## Authentication & Secrets
+
+Variables for authentication and security.
+
+<ParamField path="BETTER_AUTH_SECRET" type="string" required>
+  Secret key for signing Better Auth session tokens.
+
+  ```bash
+  BETTER_AUTH_SECRET=your_random_secret_here
+  ```
+
+  **Generate a secure secret**:
+  ```bash
+  openssl rand -base64 32
+  ```
+
+  <Warning>
+    Keep this secret secure. Changing it will invalidate all existing sessions.
+  </Warning>
+</ParamField>
+
+<ParamField path="INTERNAL_CRON_SECRET" type="string" required>
+  Secret for authenticating internal cron job requests.
+
+  ```bash
+  INTERNAL_CRON_SECRET=your_random_secret_here
+  ```
+
+  **Generate**:
+  ```bash
+  openssl rand -hex 32
+  ```
+</ParamField>
+
+<ParamField path="GOOGLE_CLIENT_ID" type="string" optional>
+  Google OAuth client ID for Google authentication.
+
+  ```bash
+  GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+  ```
+
+  Obtain from [Google Cloud Console](https://console.cloud.google.com/apis/credentials).
+</ParamField>
+
+<ParamField path="GOOGLE_CLIENT_SECRET" type="string" optional>
+  Google OAuth client secret for Google authentication.
+
+  ```bash
+  GOOGLE_CLIENT_SECRET=your-client-secret
+  ```
+
+  <Warning>
+    Keep this secret secure. Never expose in client-side code.
+  </Warning>
+</ParamField>
+
+## Redis Configuration
+
+Variables for Redis queue and cache.
+
+<ParamField path="REDIS_URL" type="string" required>
+  Full Redis connection URL.
+
+  **Local development**:
+  ```bash
+  REDIS_URL=redis://localhost:6379
+  ```
+
+  **With password**:
+  ```bash
+  REDIS_URL=redis://:your_password@localhost:6379
+  ```
+
+  **Docker**:
+  ```bash
+  REDIS_URL=redis://redis:6379
+  ```
+</ParamField>
+
+<ParamField path="REDIS_HOST" type="string" required>
+  Redis server hostname.
+
+  **Local**: `localhost`
+  **Docker**: `redis`
+
+  ```bash
+  REDIS_HOST=redis
+  ```
+</ParamField>
+
+<ParamField path="REDIS_PORT" type="number" required>
+  Redis server port.
+
+  **Default**: `6379`
+
+  ```bash
+  REDIS_PORT=6379
+  ```
+</ParamField>
+
+<ParamField path="REDIS_PASSWORD" type="string" required>
+  Redis authentication password.
+
+  ```bash
+  REDIS_PASSWORD=your_secure_password
+  ```
+
+  <Warning>
+    This password must match in both `.env` and `apps/agent/.env`. Redis in Docker Compose uses this for authentication.
+  </Warning>
+</ParamField>
+
+## Agent Worker Configuration
+
+Variables specific to the browser automation agent worker (set in `apps/agent/.env`).
+
+<ParamField path="AGENT_WORKER_CONCURRENCY" type="number" optional>
+  Number of concurrent browser jobs the agent can process.
+
+  **Default**: `1`
+
+  ```bash
+  AGENT_WORKER_CONCURRENCY=1
+  ```
+
+  <Note>
+    Higher values increase throughput but require more CPU and memory. Each worker runs a separate browser instance.
+  </Note>
+</ParamField>
+
+<ParamField path="VPS_AUTH_PROFILE_PATH" type="string" optional>
+  Path for storing browser authentication profiles and session data.
+
+  **Default**: `/storage`
+
+  ```bash
+  VPS_AUTH_PROFILE_PATH=/storage
+  ```
+
+  In Docker, this maps to the `agent_storage` volume.
+</ParamField>
+
+## Proxy Configuration
+
+Variables for configuring proxy usage in the agent worker.
+
+<ParamField path="PROXY_SOURCE_MODE" type="string" optional>
+  How the agent obtains proxy servers.
+
+  **Options**:
+  - `auto` - Automatically fetch from proxy API
+  - `manual` - Read from a local file
+  - `none` - Don't use proxies
+
+  ```bash
+  PROXY_SOURCE_MODE=auto
+  ```
+</ParamField>
+
+<ParamField path="PROXY_API_URL" type="string" optional>
+  API endpoint to fetch proxy list (when `PROXY_SOURCE_MODE=auto`).
+
+  ```bash
+  PROXY_API_URL=https://your-proxy-api.com/list
+  ```
+</ParamField>
+
+<ParamField path="PROXY_MANUAL_FILE" type="string" optional>
+  Path to file containing proxy list (when `PROXY_SOURCE_MODE=manual`).
+
+  **Format**: One proxy per line: `host:port:username:password`
+
+  ```bash
+  PROXY_MANUAL_FILE=/storage/proxies.txt
+  ```
+</ParamField>
+
+## External APIs
+
+Variables for third-party service integrations.
+
+<ParamField path="OPENAI_API_KEY" type="string" optional>
+  OpenAI API key for GPT model access (used in analysis).
+
+  ```bash
+  OPENAI_API_KEY=sk-...
+  ```
+
+  Obtain from [OpenAI Platform](https://platform.openai.com/api-keys).
+
+  <Warning>
+    Keep this secret secure. Monitor usage to avoid unexpected costs.
+  </Warning>
+</ParamField>
+
+## Docker Configuration
+
+<ParamField path="GHCR_USERNAME" type="string" required>
+  GitHub Container Registry username for pulling Docker images.
+
+  ```bash
+  GHCR_USERNAME=your-github-username
+  ```
+
+  Used in `docker-compose.yml` to construct image URLs:
+  ```yaml
+  image: ghcr.io/${GHCR_USERNAME}/oneglanse-web:latest
+  ```
+</ParamField>
+
+## Debugging
+
+<ParamField path="DEBUG_ENABLED" type="boolean" optional>
+  Enable verbose debug logging.
+
+  **Default**: `false`
+
+  ```bash
+  DEBUG_ENABLED=false
+  ```
+
+  Set to `true` for detailed logs during development:
+  ```bash
+  DEBUG_ENABLED=true
+  ```
+</ParamField>
+
+## Environment-Specific Configurations
+
+### Local Development
+
+Minimal configuration for local development:
+
+```bash .env
+# Database
+DATABASE_URL=postgresql://user:password@localhost:5432/mydb
+POSTGRES_USER=user
+POSTGRES_PASSWORD=password
+POSTGRES_DB=mydb
+
+# ClickHouse
+CLICKHOUSE_URL=http://localhost:8123
+CLICKHOUSE_DB=analytics
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASSWORD=password
+
+# URLs
+APP_URL=http://localhost:3000
+API_BASE_URL=http://localhost:3000
+BETTER_AUTH_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:3000
+
+# Redis
+REDIS_URL=redis://localhost:6379
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=devpassword
+
+# Secrets
+BETTER_AUTH_SECRET=generate_with_openssl_rand_base64_32
+INTERNAL_CRON_SECRET=generate_with_openssl_rand_hex_32
+
+# Optional
+DEBUG_ENABLED=true
+AGENT_WORKER_CONCURRENCY=1
+PROXY_SOURCE_MODE=none
+```
+
+### Docker Compose
+
+Configuration for Docker Compose deployment:
+
+```bash .env
+# Use service names for internal communication
+DATABASE_URL=postgresql://user:password@db:5432/mydb
+CLICKHOUSE_URL=http://clickhouse:8123
+REDIS_URL=redis://:password@redis:6379
+
+# Internal URLs
+APP_URL=http://web:3000
+API_BASE_URL=http://web:3000
+
+# External URLs (must be accessible from browsers)
+BETTER_AUTH_URL=https://app.yourdomain.com
+NEXT_PUBLIC_API_URL=https://app.yourdomain.com
+
+# Registry
+GHCR_USERNAME=your-github-username
+```
+
+## Security Best Practices
+
+<Warning>
+  Follow these security guidelines to protect your OneGlance deployment:
+</Warning>
+
+1. **Generate Strong Secrets**
+   ```bash
+   # For BETTER_AUTH_SECRET
+   openssl rand -base64 32
+   
+   # For INTERNAL_CRON_SECRET
+   openssl rand -hex 32
+   ```
+
+2. **Use Strong Database Passwords**
+   - Minimum 16 characters
+   - Mix of letters, numbers, and symbols
+   - Different passwords for each service
+
+3. **Never Commit Secrets**
+   - Ensure `.env` is in `.gitignore`
+   - Use `.env.example` with placeholder values
+   - Rotate secrets regularly
+
+4. **Restrict Access**
+   - Use environment-specific values
+   - Limit database user permissions
+   - Use read-only credentials where possible
+
+5. **Monitor API Keys**
+   - Track OpenAI API usage
+   - Set up billing alerts
+   - Rotate keys periodically
+
+6. **Secure Redis**
+   - Always set `REDIS_PASSWORD` in production
+   - Don't expose Redis port publicly
+   - Use TLS for Redis in production
+
+## Validation
+
+Verify your environment configuration:
+
+<Steps>
+  <Step title="Check required variables">
+    Ensure all required variables are set and not using placeholder values like `changeme`.
+  </Step>
+
+  <Step title="Test database connections">
+    ```bash
+    # PostgreSQL
+    docker compose exec db psql -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT 1"
+    
+    # ClickHouse
+    docker compose exec clickhouse clickhouse-client --user $CLICKHOUSE_USER --password $CLICKHOUSE_PASSWORD --query "SELECT 1"
+    
+    # Redis
+    docker compose exec redis redis-cli -a $REDIS_PASSWORD ping
+    ```
+  </Step>
+
+  <Step title="Verify app startup">
+    Check application logs for connection errors:
+    ```bash
+    pnpm dev:web
+    # Look for successful database and Redis connections
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection refused errors">
+    **Problem**: Application can't connect to services.
+
+    **Solution**: 
+    - For local dev, use `localhost` in URLs
+    - For Docker, use service names (`db`, `redis`, `clickhouse`)
+    - Ensure services are running: `docker compose ps`
+  </Accordion>
+
+  <Accordion title="Authentication failed">
+    **Problem**: Database authentication errors.
+
+    **Solution**:
+    - Verify credentials match in `DATABASE_URL` and `POSTGRES_*` variables
+    - Check passwords don't contain special characters that need URL encoding
+    - Recreate services: `docker compose down -v && docker compose up -d`
+  </Accordion>
+
+  <Accordion title="Variables not updating">
+    **Problem**: Changes to `.env` not taking effect.
+
+    **Solution**:
+    - Restart the application after changing `.env`
+    - For Docker: `docker compose down && docker compose up -d`
+    - Clear Next.js cache: `rm -rf apps/web/.next`
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Local Setup" icon="laptop-code" href="/development/local-setup">
+    Complete local development setup guide
+  </Card>
+  <Card title="Docker Compose" icon="docker" href="/development/docker-compose">
+    Learn about the Docker Compose architecture
+  </Card>
+</CardGroup>

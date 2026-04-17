@@ -1,0 +1,128 @@
+---
+title: "Introduction"
+description: "Track how AI providers mention your brand with automated monitoring and analysis"
+---
+
+## What is OneGlanse?
+
+OneGlanse is a SaaS platform that tracks how AI providers mention your brand. By running scheduled prompts across ChatGPT, Claude, Perplexity, Gemini, and Google AI Overview, OneGlanse captures responses, analyzes visibility and sentiment, and helps you understand your brand's position in AI-generated answers.
+
+## Why it matters
+
+As AI becomes the primary interface for information discovery, brand visibility in AI responses is critical. Traditional SEO strategies don't apply to AI providers. OneGlanse gives you:
+
+- **Visibility into AI mentions**: See when and how AI providers reference your brand
+- **Competitive intelligence**: Track how you compare against competitors in AI responses
+- **Sentiment tracking**: Monitor whether AI portrays your brand positively or negatively
+- **Position analysis**: Understand your ranking when AI recommends products or services
+
+## How it works
+
+<Steps>
+  <Step title="Create prompts">
+    Write prompts that represent how users might ask about your product category. For example: "What are the best project management tools?"
+  </Step>
+  <Step title="Automated execution">
+    OneGlanse runs your prompts across all enabled AI providers using real browser automation with Playwright. No API required.
+  </Step>
+  <Step title="AI analysis">
+    Responses are analyzed using OpenAI to extract structured metrics: GEO Score, sentiment, visibility, position, and competitive landscape.
+  </Step>
+  <Step title="Dashboard insights">
+    View aggregated metrics, track changes over time, and export data to inform your AI visibility strategy.
+  </Step>
+</Steps>
+
+## Core features
+
+<CardGroup cols={2}>
+  <Card title="Multi-provider monitoring" icon="brain">
+    Track mentions across ChatGPT, Claude, Perplexity, Gemini, and Google AI Overview with a single platform.
+  </Card>
+  <Card title="Browser automation" icon="window">
+    Real browser sessions using Playwright ensure accurate results without relying on unstable APIs.
+  </Card>
+  <Card title="GEO Score" icon="chart-line">
+    Composite 0-100 score measuring your brand's overall performance in AI responses.
+  </Card>
+  <Card title="Sentiment analysis" icon="face-smile">
+    Track whether AI providers portray your brand positively, negatively, or neutrally.
+  </Card>
+  <Card title="Position tracking" icon="ranking-star">
+    See where your brand ranks when AI lists alternatives or recommendations.
+  </Card>
+  <Card title="Competitive landscape" icon="users">
+    Identify which competitors appear alongside your brand and how they compare.
+  </Card>
+  <Card title="Scheduled runs" icon="clock">
+    Automate prompt execution with flexible cron schedules (every 12 hours, daily, weekly, etc.).
+  </Card>
+  <Card title="Team workspaces" icon="briefcase">
+    Organize monitoring by brand with workspace-based access control.
+  </Card>
+</CardGroup>
+
+## Key metrics explained
+
+### GEO Score
+
+The **GEO Score** (Generative Engine Optimization Score) is a composite 0-100 metric that measures your brand's overall performance in AI responses. It combines:
+
+- **Presence**: Is your brand mentioned? How prominent is the mention?
+- **Position**: Where do you rank in lists or recommendations?
+- **Sentiment**: How favorably is your brand portrayed?
+
+A score of **60+** is excellent, **30-59** is moderate, and **below 30** indicates low visibility.
+
+### Brand analysis structure
+
+Every analyzed response includes:
+
+- **Presence**: Mention count, visibility percentage, prominence level
+- **Position**: Rank position, top pick status, ranking context
+- **Sentiment**: Score, label (very positive to very negative), positives/negatives
+- **Recommendation**: Type (top pick, strong alternative, conditional, etc.)
+- **Competitors**: List of mentioned competitors with their metrics
+- **Perception**: Core claims, differentiators, pricing perception
+- **Risks**: Outdated info, factual errors, brand confusion alerts
+- **Actions**: Prioritized recommendations for improvement
+
+<Note>
+  Brand analysis is generated using OpenAI's GPT models to extract structured insights from unstructured AI responses.
+</Note>
+
+## Architecture overview
+
+OneGlanse is built as a monorepo with:
+
+- **Web app** (`apps/web`): Next.js 15 + tRPC for authenticated product experience
+- **Agent worker** (`apps/agent`): BullMQ + Playwright for browser automation
+- **Shared packages**: Database schemas (Drizzle ORM), business logic, UI components, and utilities
+
+Data flows through:
+
+1. User creates prompts in the web app
+2. Web app submits jobs to Redis/BullMQ queues
+3. Agent workers consume jobs and execute prompts in real browsers
+4. Responses are stored in ClickHouse for analytics
+5. Analysis jobs process responses into structured metrics
+6. Dashboard displays aggregated insights
+
+<Warning>
+  OneGlanse requires Redis, PostgreSQL, and ClickHouse to operate. See [Local Setup](/development/local-setup) for infrastructure details.
+</Warning>
+
+## Who should use OneGlanse?
+
+- **Marketing teams** tracking brand visibility in AI-generated content
+- **Product teams** monitoring competitive positioning in AI recommendations
+- **SEO professionals** adapting strategies for generative AI (GEO)
+- **Agencies** managing brand perception across AI providers for clients
+
+## Get started
+
+Ready to track your brand across AI providers?
+
+<Card title="Quickstart" icon="rocket" href="/quickstart">
+  Set up your first workspace, add prompts, and start monitoring in minutes.
+</Card>

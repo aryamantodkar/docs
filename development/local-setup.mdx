@@ -1,0 +1,363 @@
+---
+title: 'Local Development Setup'
+description: 'Complete guide to setting up OneGlance locally for development'
+---
+
+## Prerequisites
+
+Before setting up OneGlance locally, ensure you have the following installed:
+
+<CardGroup cols={3}>
+  <Card title="Node.js" icon="node">
+    Version 20 or higher required
+  </Card>
+  <Card title="pnpm" icon="package">
+    Version 10 or higher required
+  </Card>
+  <Card title="Docker" icon="docker">
+    Docker Desktop with Docker Compose
+  </Card>
+</CardGroup>
+
+### Verify Prerequisites
+
+Check your installed versions:
+
+```bash
+node --version  # Should be v20.x.x or higher
+pnpm --version  # Should be 10.x.x or higher
+docker --version && docker compose version
+```
+
+## Step-by-Step Setup
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the OneGlance monorepo to your local machine:
+
+    ```bash
+    git clone <repository-url>
+    cd oneglanse
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Install all workspace dependencies using pnpm:
+
+    ```bash
+    pnpm install
+    ```
+
+    This will install dependencies for all apps and packages in the monorepo using pnpm workspaces.
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create environment files from the examples:
+
+    ```bash
+    cp .env.example .env
+    cp apps/agent/.env.example apps/agent/.env
+    ```
+
+    <Warning>
+      Edit the `.env` files to update placeholder values like `changeme` with actual credentials. See the [Environment Variables](/development/environment-variables) guide for details.
+    </Warning>
+
+    At minimum, update these values in `.env`:
+    - `BETTER_AUTH_SECRET` - Generate with `openssl rand -base64 32`
+    - `REDIS_PASSWORD` - Set a strong password
+    - `POSTGRES_PASSWORD` - Set a strong password
+    - `CLICKHOUSE_PASSWORD` - Set a strong password
+    - `INTERNAL_CRON_SECRET` - Generate a random secret
+    - `GHCR_USERNAME` - Your GitHub username (for Docker images)
+  </Step>
+
+  <Step title="Start infrastructure services">
+    Start the required infrastructure services using Docker Compose:
+
+    ```bash
+    docker compose up -d db clickhouse redis
+    ```
+
+    This starts:
+    - **PostgreSQL** (db) - Main application database
+    - **ClickHouse** (clickhouse) - Analytics database
+    - **Redis** (redis) - Queue and cache
+
+    Wait for services to be healthy:
+
+    ```bash
+    docker compose ps
+    ```
+
+    All three services should show "healthy" status.
+  </Step>
+
+  <Step title="Run database migrations">
+    Initialize the database schema:
+
+    ```bash
+    pnpm db:migrate
+    ```
+
+    This runs Drizzle ORM migrations to set up the PostgreSQL and ClickHouse schemas.
+  </Step>
+
+  <Step title="Start development servers">
+    Start the application services in separate terminal windows:
+
+    <CodeGroup>
+      ```bash Web App (Main Product)
+      pnpm dev:web
+      ```
+
+      ```bash Agent Worker
+      pnpm dev:agent
+      ```
+
+      ```bash Landing Site
+      pnpm dev:landing
+      ```
+
+      ```bash Documentation Site
+      pnpm dev:docs
+      ```
+    </CodeGroup>
+
+    Or start all services at once:
+
+    ```bash
+    pnpm dev
+    ```
+  </Step>
+</Steps>
+
+## Service URLs
+
+Once running, access the services at:
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| Web App | http://localhost:3000 | Main authenticated product application |
+| Landing | http://localhost:3000 | Public marketing website |
+| Docs | http://localhost:3002 | Technical documentation |
+| Drizzle Studio | Run `pnpm db:studio` | Database management UI |
+
+## Verification Steps
+
+<Steps>
+  <Step title="Check infrastructure services">
+    Verify all Docker services are running and healthy:
+
+    ```bash
+    docker compose ps
+    ```
+
+    Expected output should show `db`, `clickhouse`, and `redis` with "healthy" status.
+  </Step>
+
+  <Step title="Test database connection">
+    Open Drizzle Studio to verify database connectivity:
+
+    ```bash
+    pnpm db:studio
+    ```
+
+    This should open a browser window showing your database schema.
+  </Step>
+
+  <Step title="Access the web app">
+    Navigate to http://localhost:3000 in your browser. You should see the OneGlance login/signup page.
+  </Step>
+
+  <Step title="Check worker connectivity">
+    Check the agent worker logs to ensure it connected to Redis:
+
+    ```bash
+    # View logs from the dev:agent terminal
+    # Look for successful Redis connection messages
+    ```
+  </Step>
+</Steps>
+
+## Available Scripts
+
+Common development commands:
+
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Run all dev tasks through Turbo |
+| `pnpm dev:web` | Start only the web app |
+| `pnpm dev:agent` | Start only the agent worker |
+| `pnpm dev:landing` | Start only the landing site |
+| `pnpm dev:docs` | Start only the docs site |
+| `pnpm build` | Build all workspaces |
+| `pnpm typecheck` | Type-check all workspaces |
+| `pnpm lint` | Run lint pipelines |
+| `pnpm lint:fix` | Auto-fix linting issues |
+| `pnpm db:generate` | Generate Drizzle schema files |
+| `pnpm db:migrate` | Run database migrations |
+| `pnpm db:push` | Push schema changes to database |
+| `pnpm db:studio` | Open Drizzle Studio |
+| `pnpm clean` | Clear Turbo outputs and node_modules |
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Docker services won't start">
+    **Problem**: `docker compose up` fails or services show unhealthy status.
+
+    **Solutions**:
+    1. Ensure Docker Desktop is running
+    2. Check port conflicts:
+       ```bash
+       lsof -i :5432  # PostgreSQL
+       lsof -i :8123  # ClickHouse
+       lsof -i :6379  # Redis
+       ```
+    3. View service logs:
+       ```bash
+       docker compose logs db
+       docker compose logs clickhouse
+       docker compose logs redis
+       ```
+    4. Reset Docker volumes if corrupted:
+       ```bash
+       docker compose down -v
+       docker compose up -d db clickhouse redis
+       ```
+  </Accordion>
+
+  <Accordion title="Database migration fails">
+    **Problem**: `pnpm db:migrate` command fails with connection errors.
+
+    **Solutions**:
+    1. Verify database service is healthy:
+       ```bash
+       docker compose ps db
+       ```
+    2. Check DATABASE_URL in `.env` matches your Docker setup:
+       ```bash
+       DATABASE_URL=postgresql://user:password@localhost:5432/mydb
+       ```
+    3. Test connection manually:
+       ```bash
+       docker compose exec db psql -U user -d mydb
+       ```
+    4. Ensure POSTGRES_USER, POSTGRES_PASSWORD, and POSTGRES_DB in `.env` match DATABASE_URL credentials
+  </Accordion>
+
+  <Accordion title="Web app shows connection errors">
+    **Problem**: Web app can't connect to database or Redis.
+
+    **Solutions**:
+    1. Verify all infrastructure services are running:
+       ```bash
+       docker compose ps
+       ```
+    2. Check environment variables in `.env`
+    3. For local development, use `localhost` in URLs:
+       ```bash
+       DATABASE_URL=postgresql://user:password@localhost:5432/mydb
+       REDIS_URL=redis://localhost:6379
+       CLICKHOUSE_URL=http://localhost:8123
+       ```
+    4. Restart the web app after changing environment variables
+  </Accordion>
+
+  <Accordion title="pnpm install fails">
+    **Problem**: Dependency installation errors.
+
+    **Solutions**:
+    1. Ensure you're using pnpm 10+:
+       ```bash
+       pnpm --version
+       ```
+    2. Clear pnpm cache:
+       ```bash
+       pnpm store prune
+       pnpm install
+       ```
+    3. Delete node_modules and lockfile:
+       ```bash
+       pnpm clean
+       pnpm install
+       ```
+    4. Check Node.js version (must be 20+):
+       ```bash
+       node --version
+       ```
+  </Accordion>
+
+  <Accordion title="Port already in use">
+    **Problem**: Application fails to start because port is already in use.
+
+    **Solutions**:
+    1. Find and kill the process using the port:
+       ```bash
+       # Find process
+       lsof -i :3000
+       # Kill process
+       kill -9 <PID>
+       ```
+    2. Or change the port in your environment:
+       ```bash
+       PORT=3001 pnpm dev:web
+       ```
+  </Accordion>
+
+  <Accordion title="Agent worker not processing jobs">
+    **Problem**: Jobs submitted but not executed by agent worker.
+
+    **Solutions**:
+    1. Check Redis connection in agent logs
+    2. Verify Redis password matches in both `.env` and `apps/agent/.env`:
+       ```bash
+       REDIS_PASSWORD=changeme  # Must match in both files
+       ```
+    3. Ensure Redis is healthy:
+       ```bash
+       docker compose ps redis
+       ```
+    4. Test Redis connection:
+       ```bash
+       docker compose exec redis redis-cli -a <password> ping
+       ```
+  </Accordion>
+
+  <Accordion title="TypeScript errors on fresh install">
+    **Problem**: Type errors after initial setup.
+
+    **Solutions**:
+    1. Build all packages first:
+       ```bash
+       pnpm build
+       ```
+    2. Generate Drizzle types:
+       ```bash
+       pnpm db:generate
+       ```
+    3. Restart TypeScript server in your editor
+    4. Run type check:
+       ```bash
+       pnpm typecheck
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="key" href="/development/environment-variables">
+    Learn about all environment variables and configuration options
+  </Card>
+  <Card title="Docker Compose" icon="docker" href="/development/docker-compose">
+    Understand the Docker Compose setup and service architecture
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture/overview">
+    Explore the monorepo structure and data flow
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/contributing">
+    Guidelines for contributing to OneGlance
+  </Card>
+</CardGroup>

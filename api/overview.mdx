@@ -1,0 +1,146 @@
+---
+title: 'API Overview'
+description: 'Introduction to the OneGlance tRPC API'
+---
+
+## Introduction
+
+OneGlance provides a type-safe tRPC API for tracking how AI providers mention your brand. The API uses tRPC for end-to-end type safety and superjson for data serialization, supporting advanced JavaScript types like Date, Map, and Set.
+
+## Authentication
+
+The OneGlance API uses session-based authentication powered by Better Auth. All API requests must include valid session credentials.
+
+### Authentication Types
+
+The API has three authentication levels:
+
+- **Public Procedures**: No authentication required
+- **Protected Procedures**: Requires authenticated user session
+- **Authorized Workspace Procedures**: Requires authentication and workspace membership
+
+### Making Authenticated Requests
+
+Authentication is handled automatically through session cookies when using the tRPC client. All workspace-specific endpoints require a `workspaceId` parameter to identify which workspace the operation applies to.
+
+```typescript
+const result = await trpc.workspace.getById.query({
+  workspaceId: "ws_123456789"
+});
+```
+
+## Request Format
+
+OneGlance uses tRPC which provides type-safe RPC-style calls. There are two types of procedures:
+
+### Queries
+
+Queries are used for data retrieval (GET operations):
+
+```typescript
+const workspaces = await trpc.workspace.listAllForUser.query();
+```
+
+### Mutations
+
+Mutations are used for data modification (POST/PUT/DELETE operations):
+
+```typescript
+const workspace = await trpc.workspace.create.mutate({
+  name: "My Workspace",
+  slug: "my-workspace",
+  domain: "example.com",
+  organizationName: "My Organization"
+});
+```
+
+## Error Handling
+
+The API uses a structured error format with domain-specific error codes:
+
+```typescript
+{
+  error: {
+    message: "Only workspace owners can update workspace details.",
+    code: "VALIDATION_ERROR",
+    data: {
+      zodError: null,
+      domainCode: "VALIDATION_ERROR",
+      meta: {},
+      isOperational: true
+    }
+  }
+}
+```
+
+### Error Types
+
+- **ValidationError**: Input validation failed or business rule violated
+- **AuthError**: Authentication or authorization failed
+- **TRPCError**: General tRPC errors (BAD_REQUEST, UNAUTHORIZED, etc.)
+
+### Zod Validation Errors
+
+When input validation fails, the error includes a `zodError` field with detailed validation information:
+
+```typescript
+{
+  error: {
+    data: {
+      zodError: {
+        fieldErrors: {
+          email: ["Invalid email"]
+        }
+      }
+    }
+  }
+}
+```
+
+## Rate Limits
+
+The API implements rate limiting on specific endpoints to ensure fair usage:
+
+| Endpoint | Limit | Window |
+|----------|-------|--------|
+| `workspace.create` | 3 requests | 1 hour |
+| `workspace.joinByCode` | 5 requests | 15 minutes |
+| `prompt.store` | 20 requests | 1 minute |
+| `analysis.analyzeMetrics` | 10 requests | 1 minute |
+| `agent.run` | 3 requests | 1 minute |
+
+When rate limits are exceeded, the API returns a `TOO_MANY_REQUESTS` error.
+
+## Data Serialization
+
+The API uses [superjson](https://github.com/blitz-js/superjson) for data serialization, which means:
+
+- Date objects are automatically serialized and deserialized
+- Special types like Map, Set, BigInt are supported
+- Undefined values are preserved (unlike standard JSON)
+
+## API Routers
+
+The OneGlance API is organized into the following routers:
+
+- [Workspace](/api/workspace) - Manage workspaces, organizations, and team members
+- [Prompts](/api/prompts) - Store and retrieve prompts for analysis
+- [Analysis](/api/analysis) - Analyze prompts to extract brand mentions and metrics
+- [Agent](/api/agent) - Run automated agents to collect and analyze prompts
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Workspace API" icon="building" href="/api/workspace">
+    Create and manage workspaces
+  </Card>
+  <Card title="Prompts API" icon="message" href="/api/prompts">
+    Store and retrieve prompts
+  </Card>
+  <Card title="Analysis API" icon="chart-line" href="/api/analysis">
+    Analyze brand mentions
+  </Card>
+  <Card title="Agent API" icon="robot" href="/api/agent">
+    Run automated agents
+  </Card>
+</CardGroup>

@@ -1,0 +1,503 @@
+---
+title: Prompt Service
+description: Store, retrieve, and schedule user prompts for AI model execution
+---
+
+The Prompt service manages user-defined prompts that are sent to AI models for analysis. It handles storage in ClickHouse, retrieval, deduplication, and scheduling via PostgreSQL cron jobs.
+
+## Core Functions
+
+### Prompt Storage
+
+#### storePromptsForWorkspace
+
+Stores a list of prompts for a workspace, handling deduplication and deletions automatically.
+
+```typescript
+import { storePromptsForWorkspace } from "@oneglanse/services";
+
+const prompts = await storePromptsForWorkspace({
+  prompts: [
+    "What are the best CRM tools for small businesses?",
+    "Which project management software is most popular?",
+    "How does [Brand] compare to competitors?"
+  ],
+  workspaceId: "workspace_abc123",
+  userId: "user_xyz789"
+});
+
+console.log(`Stored ${prompts.length} prompts`);
+```
+
+<ParamField path="args" type="StorePromptsForWorkspaceArgs" required>
+  <Expandable title="properties">
+    <ParamField path="prompts" type="string[]" required>
+      Array of prompt strings (1-100 items, each 1-500 chars)
+    </ParamField>
+    <ParamField path="workspaceId" type="string" required>
+      Target workspace ID
+    </ParamField>
+    <ParamField path="userId" type="string" required>
+      User ID for audit trail
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="prompts" type="string[]">
+  The stored prompts (after deduplication and trimming)
+</ResponseField>
+
+**Behavior:**
+- Trims whitespace from each prompt
+- Filters out empty strings
+- Deduplicates against existing prompts in workspace
+- Only inserts new prompts (skips duplicates)
+- Deletes prompts that exist in DB but not in the input array
+- Uses ClickHouse with fallback for resilience
+
+**Storage Location:** `analytics.user_prompts` table in ClickHouse
+
+---
+
+### Prompt Retrieval
+
+#### fetchUserPromptsForWorkspace
+
+Retrieves all active prompts configured for a workspace.
+
+```typescript
+import { fetchUserPromptsForWorkspace } from "@oneglanse/services";
+
+const prompts = await fetchUserPromptsForWorkspace({
+  workspaceId: "workspace_abc123"
+});
+
+prompts.forEach(p => {
+  console.log(`[${p.id}] ${p.prompt}`);
+});
+```
+
+<ParamField path="args.workspaceId" type="string" required>
+  Workspace ID to query
+</ParamField>
+
+<ResponseField name="prompts" type="UserPrompt[]">
+  Array of prompt objects with:
+  - `id`: Unique prompt identifier (UUID)
+  - `user_id`: User who created the prompt
+  - `workspace_id`: Workspace ID
+  - `prompt`: The prompt text
+  - `created_at`: Creation timestamp (ClickHouse format)
+</ResponseField>
+
+**Query:** Fetches from `analytics.user_prompts` table filtered by workspace_id
+
+---
+
+### Response Storage
+
+#### storePromptResponses
+
+Stores AI model responses for prompts after a job run. Handles multiple providers and sources.
+
+```typescript
+import { storePromptResponses } from "@oneglanse/services";
+import type { ModelResult } from "@oneglanse/types";
+
+const results: Record<Provider, ModelResult[Provider]> = {
+  perplexity: {
+    status: "fulfilled",
+    data: [{
+      promptId: "prompt_123",
+      prompt: "What are the best CRM tools?",
+      response: "The top CRM tools include...",
+      sources: [{
+        title: "Best CRM Software 2024",
+        cited_text: "HubSpot and Salesforce lead the market...",
+        url: "https://example.com/article",
+        domain: "example.com",
+        favicon: "https://example.com/favicon.ico"
+      }]
+    }]
+  },
+  chatgpt: {
+    status: "fulfilled",
+    data: [...]
+  }
+};
+
+await storePromptResponses({
+  results,
+  userId: "user_xyz789",
+  workspaceId: "workspace_abc123",
+  promptRunAt: new Date().toISOString()
+});
+```
+
+<ParamField path="args" type="StorePromptResponsesArgs" required>
+  <Expandable title="properties">
+    <ParamField path="results" type="Record<Provider, ModelResult[Provider]>" required>
+      Map of provider names to their results (fulfilled or rejected)
+    </ParamField>
+    <ParamField path="userId" type="string" required>
+      User who triggered the job
+    </ParamField>
+    <ParamField path="workspaceId" type="string" required>
+      Workspace ID
+    </ParamField>
+    <ParamField path="promptRunAt" type="string" required>
+      ISO timestamp of when prompts were executed
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Behavior:**
+- Only stores responses with `status: "fulfilled"`
+- Generates UUID for each response
+- Normalizes source data (ensures all fields present)
+- Converts timestamp to ClickHouse format
+- Uses fallback insertion (non-fatal on individual record failures)
+- Logs errors for failed records without throwing
+
+**Storage Location:** `analytics.prompt_responses` table
+
+**Source Schema:**
+```typescript
+interface Source {
+  title: string;
+  cited_text: string;
+  url: string;
+  domain: string | null;
+  favicon: string | null;
+}
+```
+
+---
+
+### Response Retrieval
+
+#### fetchPromptResponsesForWorkspace
+
+Retrieves all prompt responses for a workspace.
+
+```typescript
+import { fetchPromptResponsesForWorkspace } from "@oneglanse/services";
+
+const responses = await fetchPromptResponsesForWorkspace({
+  workspaceId: "workspace_abc123"
+});
+
+responses.forEach(r => {
+  console.log(`[${r.model_provider}] ${r.prompt}`);
+  console.log(`Response: ${r.response.slice(0, 100)}...`);
+  console.log(`Sources: ${r.sources.length}`);
+});
+```
+
+<ParamField path="args.workspaceId" type="string" required>
+  Workspace ID
+</ParamField>
+
+<ResponseField name="responses" type="PromptResponse[]">
+  Array of response objects with:
+  - `id`: Response UUID
+  - `prompt_id`: Associated prompt ID
+  - `prompt`: Original prompt text
+  - `user_id`: User ID
+  - `workspace_id`: Workspace ID
+  - `model`: Provider identifier
+  - `model_provider`: Provider name
+  - `response`: AI-generated response text
+  - `sources`: Array of source objects
+  - `prompt_run_at`: Execution timestamp
+  - `created_at`: Storage timestamp
+  - `is_analysed`: Boolean flag for analysis status
+</ResponseField>
+
+---
+
+#### fetchPromptSourcesForWorkspace
+
+Aggregates and extracts domain and source statistics from all responses.
+
+```typescript
+import { fetchPromptSourcesForWorkspace } from "@oneglanse/services";
+
+const { domain_stats, sourceStats } = await fetchPromptSourcesForWorkspace({
+  workspaceId: "workspace_abc123"
+});
+
+console.log("Top domains:");
+domain_stats.forEach(stat => {
+  console.log(`${stat.domain}: ${stat.count} mentions`);
+});
+
+console.log("\nAll sources:");
+sourceStats.forEach(source => {
+  console.log(`${source.title} - ${source.url}`);
+});
+```
+
+<ParamField path="args.workspaceId" type="string" required>
+  Workspace ID
+</ParamField>
+
+<ResponseField name="result" type="FetchPromptSourcesForWorkspaceResult">
+  Object containing:
+  - `domain_stats`: Array of `{ domain: string, count: number }` sorted by frequency
+  - `sourceStats`: Array of unique source objects with title, url, domain, favicon, cited_text
+</ResponseField>
+
+**Implementation:**
+1. Fetches all responses via `fetchPromptResponsesForWorkspace`
+2. Calls `extractDomainStats(responses)` from `@oneglanse/utils`
+3. Calls `extractSourceStats(responses)` from `@oneglanse/utils`
+
+---
+
+### Scheduling
+
+#### scheduleCronForPrompts
+
+Sets up a PostgreSQL cron job to automatically run prompts on a schedule.
+
+```typescript
+import { scheduleCronForPrompts } from "@oneglanse/services";
+
+// Run daily at 9 AM UTC
+await scheduleCronForPrompts({
+  workspaceId: "workspace_abc123",
+  userId: "user_xyz789",
+  cronExpression: "0 9 * * *"
+});
+
+// Run every 6 hours
+await scheduleCronForPrompts({
+  workspaceId: "workspace_abc123",
+  userId: "user_xyz789",
+  cronExpression: "0 */6 * * *"
+});
+```
+
+<ParamField path="args" type="ScheduleCronForPromptsArgs" required>
+  <Expandable title="properties">
+    <ParamField path="workspaceId" type="string" required>
+      Workspace to schedule
+    </ParamField>
+    <ParamField path="userId" type="string" required>
+      User ID for job execution context
+    </ParamField>
+    <ParamField path="cronExpression" type="string" required>
+      Standard cron expression (e.g., "0 9 * * *")
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Behavior:**
+- Removes any existing schedule for the workspace first
+- Creates new `pg_cron` job named `auto_run_prompts_{workspaceId}`
+- Job calls internal tRPC endpoint `/api/trpc/internal.runPrompts`
+- Uses `current_setting('app.api_base_url')` and `current_setting('app.cron_secret')` from GUCs
+- Secrets are NOT stored in `cron.job` table (read at runtime)
+- Requires `configureSchedulerSecrets()` to have been called at startup
+
+**Security:**
+- Uses parameterized SQL via `format(%L, ...)` to prevent injection
+- Authenticates with `Authorization: Bearer {cron_secret}` header
+- Validates request via internal middleware
+
+---
+
+#### unscheduleCronForPrompts
+
+Removes the cron schedule for a workspace.
+
+```typescript
+import { unscheduleCronForPrompts } from "@oneglanse/services";
+
+await unscheduleCronForPrompts({
+  workspaceId: "workspace_abc123"
+});
+```
+
+<ParamField path="args.workspaceId" type="string" required>
+  Workspace ID
+</ParamField>
+
+**Behavior:**
+- Calls `cron.unschedule('auto_run_prompts_{workspaceId}')`
+- Gracefully handles case where schedule doesn't exist
+- Does not throw errors
+
+---
+
+#### configureSchedulerSecrets
+
+Initializes PostgreSQL GUCs with API credentials for cron jobs. **Must be called once at service startup.**
+
+```typescript
+import { configureSchedulerSecrets } from "@oneglanse/services";
+
+// In server initialization code
+await configureSchedulerSecrets();
+```
+
+**Behavior:**
+- Reads `API_BASE_URL` and `INTERNAL_CRON_SECRET` from environment
+- Executes `ALTER ROLE CURRENT_USER SET app.api_base_url = $1`
+- Executes `ALTER ROLE CURRENT_USER SET app.cron_secret = $1`
+- Persists GUCs for all future sessions opened by the app role
+- Falls back gracefully with warning if ALTER ROLE fails (insufficient permissions)
+
+**Requirements:**
+- Database role must have `ALTER ROLE` privilege on itself, OR
+- Must be called with a superuser role
+
+**Environment Variables:**
+```bash
+API_BASE_URL=https://api.oneglanse.com
+INTERNAL_CRON_SECRET=your-secret-key
+```
+
+---
+
+## Usage in tRPC Routers
+
+Example from `apps/web/src/server/api/routers/prompt/prompt.ts`:
+
+```typescript
+import { 
+  storePromptsForWorkspace,
+  fetchUserPromptsForWorkspace,
+  fetchPromptSourcesForWorkspace 
+} from "@oneglanse/services";
+import { authorizedWorkspaceProcedure } from "../../procedures";
+import { z } from "zod";
+
+export const promptRouter = createTRPCRouter({
+  store: authorizedWorkspaceProcedure
+    .input(z.object({
+      prompts: z.array(z.string().min(1).max(500)).min(1).max(100)
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const { prompts } = input;
+      const { user: { id: userId }, workspaceId } = ctx;
+
+      return storePromptsForWorkspace({
+        prompts,
+        workspaceId,
+        userId,
+      });
+    }),
+
+  fetchUserPrompts: authorizedWorkspaceProcedure.query(async ({ ctx }) => {
+    return fetchUserPromptsForWorkspace({
+      workspaceId: ctx.workspaceId,
+    });
+  }),
+
+  fetchPromptSources: authorizedWorkspaceProcedure.query(async ({ ctx }) => {
+    return fetchPromptSourcesForWorkspace({ 
+      workspaceId: ctx.workspaceId 
+    });
+  }),
+});
+```
+
+---
+
+## ClickHouse Schema
+
+### analytics.user_prompts
+
+```sql
+CREATE TABLE analytics.user_prompts (
+  id String,
+  user_id String,
+  workspace_id String,
+  prompt String,
+  created_at DateTime
+) ENGINE = MergeTree()
+ORDER BY (workspace_id, created_at);
+```
+
+### analytics.prompt_responses
+
+```sql
+CREATE TABLE analytics.prompt_responses (
+  id String,
+  prompt_id String,
+  prompt String,
+  user_id String,
+  workspace_id String,
+  model String,
+  model_provider String,
+  response String,
+  sources Array(Tuple(
+    title String,
+    cited_text String,
+    url String,
+    domain Nullable(String),
+    favicon Nullable(String)
+  )),
+  prompt_run_at DateTime,
+  created_at DateTime DEFAULT now(),
+  is_analysed Boolean DEFAULT false
+) ENGINE = MergeTree()
+ORDER BY (workspace_id, prompt_run_at);
+```
+
+---
+
+## Error Handling
+
+### storePromptsForWorkspace
+- Throws if all inserts fail (when `throwOnAllFailed: true`)
+- Logs individual record failures to console
+- Non-fatal for partial failures
+
+### storePromptResponses
+- Never throws (uses `throwOnAllFailed: false`)
+- Logs detailed error info for failed records
+- Includes prompt preview and response length in error logs
+
+### Scheduling Functions
+- `scheduleCronForPrompts`: Throws `DatabaseError` if SQL generation fails
+- `unscheduleCronForPrompts`: Never throws (catches and ignores errors)
+- `configureSchedulerSecrets`: Logs warnings but doesn't throw
+
+---
+
+## Type Definitions
+
+```typescript
+import type {
+  StorePromptsForWorkspaceArgs,
+  StorePromptResponsesArgs,
+  FetchUserPromptsForWorkspaceArgs,
+  FetchPromptResponsesForWorkspaceArgs,
+  FetchPromptSourcesForWorkspaceArgs,
+  FetchPromptSourcesForWorkspaceResult,
+  ScheduleCronForPromptsArgs,
+  UnscheduleCronForPromptsArgs,
+  UserPrompt,
+  PromptResponse,
+  Source,
+  Provider,
+  ModelResult,
+} from "@oneglanse/types";
+```
+
+---
+
+## Source Files
+
+- `packages/services/src/prompt/storePromptsForWorkspace.ts` - Prompt storage
+- `packages/services/src/prompt/storePromptResponses.ts` - Response storage
+- `packages/services/src/prompt/fetchUserPromptsForWorkspace.ts` - Prompt retrieval
+- `packages/services/src/prompt/fetchPromptResponsesForWorkspace.ts` - Response retrieval
+- `packages/services/src/prompt/fetchPromptSourcesForWorkspace.ts` - Source aggregation
+- `packages/services/src/prompt/scheduler.ts` - Cron scheduling
+- `packages/services/src/prompt/lib/insertClickHouseWithFallback.ts` - Resilient insertion
+
+All exports are re-exported through `packages/services/src/prompt/index.ts`.

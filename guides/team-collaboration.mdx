@@ -1,0 +1,700 @@
+---
+title: 'Team Collaboration'
+description: 'Best practices for multi-user workflows, role management, and coordinating AI visibility tracking across teams'
+---
+
+## Overview
+
+OneGlance supports team collaboration through workspaces and organizations. Multiple users can access the same brand data, coordinate prompt strategies, and share insights.
+
+<Note>
+  **Workspaces** track individual brands. **Organizations** group multiple workspaces under shared ownership. A user can belong to multiple organizations and access multiple workspaces.
+</Note>
+
+## Understanding the Team Structure
+
+### Organizations
+
+An organization is a top-level entity that owns workspaces.
+
+- **Created automatically** when you create your first workspace
+- **Name**: Defaults to `{YourName}'s Organization` (customizable)
+- **Ownership**: Shared among organization owners
+- **Purpose**: Centralized billing and access control (future features)
+
+### Workspaces
+
+A workspace tracks one brand across AI providers.
+
+- **Belongs to** exactly one organization
+- **Members**: Users with explicit access to view/edit workspace data
+- **Roles**: Owner or Member (see [Role Permissions](#role-permissions))
+
+### Example Structure
+
+```
+Acme Marketing Org
+├── Workspace: Acme CRM (domain: acme.com)
+│   ├── Owner: alice@acme.com
+│   ├── Owner: bob@acme.com
+│   └── Member: charlie@acme.com
+├── Workspace: Acme Analytics (domain: acme-analytics.com)
+│   ├── Owner: alice@acme.com
+│   └── Member: dana@acme.com
+└── Workspace: Acme Mobile App (domain: acmeapp.io)
+    └── Owner: bob@acme.com
+```
+
+## Role Permissions
+
+### Workspace Roles
+
+<Tabs>
+  <Tab title="Owner">
+    Full control over the workspace.
+
+    **Permissions**:
+    - View dashboard, prompts, and all data ✅
+    - Add/edit/delete prompts ✅
+    - Run prompts and schedule automation ✅
+    - Invite and remove members ✅
+    - Edit brand name and domain ✅
+    - Change workspace settings ✅
+    - Delete workspace ✅
+    - Update organization name ✅ (if organization owner)
+
+    **Use cases**:
+    - Marketing leads
+    - Product managers
+    - Executives overseeing brand strategy
+  </Tab>
+
+  <Tab title="Member">
+    Read/write access to workspace data, but no admin privileges.
+
+    **Permissions**:
+    - View dashboard, prompts, and all data ✅
+    - Add/edit/delete prompts ✅
+    - Run prompts and schedule automation ✅
+    - Export data ✅
+    - Invite and remove members ❌
+    - Edit brand name and domain ❌
+    - Delete workspace ❌
+    - Update organization name ❌
+
+    **Use cases**:
+    - Content marketers
+    - SEO specialists
+    - Analysts who need data access
+  </Tab>
+</Tabs>
+
+### Permission Implementation
+
+From `apps/web/src/app/(auth)/people/page.tsx:591`:
+
+```tsx
+<TableCell>
+  {member.role !== 'owner' && (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={() => handleWsRemoveMember(member.userId, member.role)}
+    >
+      <Trash2 className="h-4 w-4" />
+    </Button>
+  )}
+</TableCell>
+```
+
+Owners cannot be removed via the UI—at least one owner must exist per workspace.
+
+## Inviting Team Members
+
+### Method 1: Email Invite
+
+Invite registered users directly by email.
+
+<Steps>
+  <Step title="Navigate to People Page">
+    From any page, click **People** in the sidebar.
+  </Step>
+
+  <Step title="Enter Email and Role">
+    In the Members section:
+
+    ```tsx
+    // From apps/web/src/app/(auth)/people/page.tsx:505
+    <Input
+      placeholder="Email address (we'll invite if needed)"
+      value={wsInviteEmail}
+      onChange={(e) => setWsInviteEmail(e.target.value)}
+    />
+    <Select value={wsInviteRole} onValueChange={setWsInviteRole}>
+      <SelectItem value="member">Member</SelectItem>
+      <SelectItem value="owner">Owner</SelectItem>
+    </Select>
+    <Button onClick={handleWsAddMember}>Add</Button>
+    ```
+  </Step>
+
+  <Step title="Handle Response">
+    The system checks if the user exists:
+
+    **User found**: Immediately added to workspace
+    ```tsx
+    // From apps/web/src/app/(auth)/people/page.tsx:146
+    toast.success('Member added to workspace!');
+    ```
+
+    **User not found**: Prompt to share workspace code instead
+    ```tsx
+    // From apps/web/src/app/(auth)/people/page.tsx:135
+    toast.error(
+      'User not found. Share your workspace code so they can join after signing up.'
+    );
+    ```
+
+    **Already a member**: Confirmation message
+    ```tsx
+    // From apps/web/src/app/(auth)/people/page.tsx:142
+    toast.success('This user is already a workspace member.');
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+  For teammates who haven't signed up yet, use [Method 2: Workspace Join Code](#method-2-workspace-join-code) instead.
+</Tip>
+
+### Method 2: Workspace Join Code
+
+Every workspace has a globally unique join code that grants instant access.
+
+<Steps>
+  <Step title="Copy the Join Code">
+    On the People page, find the **Workspace Join Code** section:
+
+    ```tsx
+    // From apps/web/src/app/(auth)/people/page.tsx:475
+    <Input
+      readOnly
+      value={joinInfo?.workspaceCode ?? ''}
+      className="font-mono"
+    />
+    <Button onClick={() => handleCopy(joinInfo?.workspaceCode, 'Workspace code')}>
+      Copy
+    </Button>
+    ```
+
+    Example code: `acme-crm-x7j9k2`
+  </Step>
+
+  <Step title="Share with Teammates">
+    Send the code via:
+    - Slack/Teams message
+    - Email
+    - Internal wiki/docs
+  </Step>
+
+  <Step title="Teammate Uses Code">
+    The recipient can join by:
+
+    **During signup**:
+    1. Create OneGlance account
+    2. Enter workspace code when prompted
+    3. Auto-joins after email verification
+
+    **After signup**:
+    1. Log in to OneGlance
+    2. Click workspace switcher (top nav)
+    3. Select **Join with Code**
+    4. Enter code and submit
+  </Step>
+</Steps>
+
+<Warning>
+  Workspace codes grant **Member** role by default. To give someone Owner access:
+  1. They join via code (becomes Member)
+  2. An existing Owner promotes them on the People page
+</Warning>
+
+### Comparison: Email vs Code
+
+| Factor | Email Invite | Join Code |
+|--------|--------------|----------|
+| **Requires registered user** | Yes | No (can use during signup) |
+| **Role assignment** | Choose during invite | Member only (upgrade later) |
+| **Sharing method** | One-to-one (manual) | Shareable link/text |
+| **Revocation** | Remove individual user | Regenerate code (future feature) |
+| **Best for** | Known teammates already using OneGlance | Onboarding new users or team-wide sharing |
+
+## Managing Workspace Members
+
+### Viewing the Members List
+
+The People page displays all workspace members:
+
+```tsx
+// From apps/web/src/app/(auth)/people/page.tsx:556
+<Table>
+  <TableHeader>
+    <TableRow>
+      <TableHead>Name</TableHead>
+      <TableHead>Email</TableHead>
+      <TableHead>Role</TableHead>
+      <TableHead>Actions</TableHead>
+    </TableRow>
+  </TableHeader>
+  <TableBody>
+    {wsMembers.map((member) => (
+      <TableRow key={member.memberId}>
+        <TableCell>{member.userName}</TableCell>
+        <TableCell>{member.userEmail}</TableCell>
+        <TableCell>
+          <span className={getRoleBadgeClass(member.role)}>
+            {member.role}
+          </span>
+        </TableCell>
+        <TableCell>
+          {member.role !== 'owner' && (
+            <Button onClick={() => handleWsRemoveMember(member.userId, member.role)}>
+              <Trash2 />
+            </Button>
+          )}
+        </TableCell>
+      </TableRow>
+    ))}
+  </TableBody>
+</Table>
+```
+
+### Removing Members
+
+<Steps>
+  <Step title="Identify the Member">
+    Locate the user in the Members table.
+  </Step>
+
+  <Step title="Click Remove (Trash Icon)">
+    Only visible for non-owner members.
+
+    ```tsx
+    // From apps/web/src/app/(auth)/people/page.tsx:158
+    const handleWsRemoveMember = async (userId: string, role: string) => {
+      await removeWsMemberMutation.mutateAsync({ workspaceId, userId, role });
+      toast.success('Member removed from workspace.');
+      await wsMembersQuery.refetch();
+    };
+    ```
+  </Step>
+
+  <Step title="Confirm Removal">
+    The member immediately loses access to the workspace. They can rejoin via the workspace code if needed.
+  </Step>
+</Steps>
+
+<Warning>
+  **Owners cannot remove other owners** via the UI. To remove an owner:
+  1. Owner voluntarily leaves the workspace (not yet implemented)
+  2. Database admin directly edits workspace_members table (self-hosted only)
+</Warning>
+
+### Promoting Members to Owner
+
+<Note>
+  Currently, there's no UI to promote members to owners. This requires database access:
+
+  ```sql
+  UPDATE workspace_members
+  SET role = 'owner'
+  WHERE user_id = '{userId}' AND workspace_id = '{workspaceId}';
+  ```
+
+  A future UI will support role changes.
+</Note>
+
+## Editing Workspace and Organization Details
+
+### Updating Brand Workspace
+
+<Steps>
+  <Step title="Navigate to People Page">
+    Only **Owners** can edit workspace details.
+  </Step>
+
+  <Step title="Click Edit Icon (Pencil)">
+    In the **Brand Workspace** card:
+
+    ```tsx
+    // From apps/web/src/app/(auth)/people/page.tsx:286
+    <Button
+      variant="ghost"
+      onClick={() => setIsEditingWorkspace(true)}
+    >
+      <Pencil className="h-4 w-4" />
+    </Button>
+    ```
+  </Step>
+
+  <Step title="Modify Fields">
+    - **Brand Name**: The name AI providers should mention (e.g., "Salesforce")
+    - **Brand Domain**: Primary domain without protocol (e.g., "salesforce.com")
+
+    <Warning>
+      Changing brand name or domain **erases all analyzed data** for this workspace. Raw prompt responses remain intact, but you'll need to re-run analysis.
+
+      From `apps/web/src/app/(auth)/people/page.tsx:180`:
+      ```tsx
+      const confirmed = window.confirm(
+        'Changing brand details will erase all analyzed data for this workspace and require re-analysis. Prompt responses will remain intact. Continue?'
+      );
+      ```
+    </Warning>
+  </Step>
+
+  <Step title="Save Changes">
+    Click **Save**. The system:
+    1. Updates workspace name/domain
+    2. Clears brand_analysis data from ClickHouse
+    3. Preserves raw prompt responses
+    4. Shows confirmation:
+
+    ```tsx
+    // From apps/web/src/app/(auth)/people/page.tsx:195
+    if (result?.analysisReset) {
+      toast.success(
+        'Brand details updated. Previous analysis was cleared and will be regenerated on next analysis run.'
+      );
+    }
+    ```
+  </Step>
+</Steps>
+
+### Updating Organization Name
+
+<Steps>
+  <Step title="Click Edit Icon (Pencil) in Organization Card">
+    Only **Owners** can rename organizations.
+  </Step>
+
+  <Step title="Enter New Name">
+    The organization name appears in:
+    - Workspace switcher
+    - Join code metadata
+    - Future billing/invoice labels
+  </Step>
+
+  <Step title="Save Changes">
+    ```tsx
+    // From apps/web/src/app/(auth)/people/page.tsx:225
+    await updateOrgMutation.mutateAsync({
+      workspaceId,
+      organizationName: organizationName.trim(),
+    });
+    toast.success('Organization name updated.');
+    ```
+
+    <Warning>
+      If the mutation fails with "Only workspace owners can update organization name", verify you have the Owner role.
+    </Warning>
+  </Step>
+</Steps>
+
+## Team Workflow Best Practices
+
+### 1. Define Clear Ownership
+
+Assign owners based on responsibility, not seniority.
+
+<Accordion title="Example Role Assignment">
+  **Marketing Team (10 people)**:
+  - **Owners** (2): CMO, Marketing Ops Manager
+  - **Members** (8): Content writers, SEO specialists, analysts
+
+  **Reasoning**:
+  - Owners control scheduling and brand settings
+  - Members collaborate on prompt strategy and analysis
+  - Avoids too many cooks (5+ owners often conflict on settings)
+</Accordion>
+
+### 2. Coordinate Prompt Additions
+
+Multiple members can edit prompts simultaneously, but save operations are sequential.
+
+<Steps>
+  <Step title="Designate a Prompt Lead">
+    One person owns the "source of truth" prompt list (e.g., in a Google Doc or Notion).
+  </Step>
+
+  <Step title="Batch Updates Weekly">
+    Rather than everyone editing prompts ad-hoc:
+    - Teammates propose prompts in shared doc
+    - Lead reviews and adds to OneGlance weekly
+    - Reduces save conflicts and maintains prompt quality
+  </Step>
+
+  <Step title="Use Naming Conventions">
+    Prefix prompts by category:
+    ```
+    [Awareness] What are the best CRM tools?
+    [Consideration] Compare Salesforce vs HubSpot
+    [Decision] Is HubSpot worth it for a 10-person team?
+    [Feature] Which CRM has the best mobile app?
+    ```
+
+    This helps the team understand prompt coverage at a glance.
+  </Step>
+</Steps>
+
+### 3. Schedule Runs During Low-Traffic Periods
+
+Scheduled runs can take 5-15 minutes depending on prompt count and enabled providers.
+
+<Tip>
+  Schedule runs outside business hours (e.g., daily at midnight) so fresh data is ready when the team starts work.
+</Tip>
+
+### 4. Share Insights via Exports
+
+Members can export data for presentations or external tools.
+
+**Example workflow**:
+1. Analyst exports Dashboard data (JSON)
+2. Processes in Python/R for custom visualizations
+3. Shares insights in Slack or internal dashboard
+
+See [Managing Prompts - Exporting](/guides/managing-prompts#exporting-prompt-data) for export formats.
+
+### 5. Regularly Review Prompt Performance
+
+Schedule a recurring team meeting (weekly or bi-weekly) to:
+- Review GEO score trends
+- Identify low-performing prompts
+- Add prompts for new product features or campaigns
+- Remove outdated prompts
+
+**Agenda template**:
+```
+1. Dashboard overview (5 min)
+   - Presence rate trend
+   - Top competitor changes
+   - Source citation shifts
+
+2. Prompt performance (10 min)
+   - Best-performing prompts (high GEO scores)
+   - Worst-performing prompts (low visibility)
+   - Prompts where brand isn't mentioned
+
+3. Action items (5 min)
+   - New prompts to add
+   - Content gaps to address
+   - Schedule adjustments
+```
+
+## Multi-Workspace Management
+
+If your organization tracks multiple brands, consider this structure:
+
+### One Workspace per Brand
+
+**Example**: SaaS company with 3 products
+
+```
+Acme Software Inc (Organization)
+├── Workspace: Acme CRM (domain: acmecrm.com)
+├── Workspace: Acme Analytics (domain: acme-analytics.com)
+└── Workspace: Acme Mobile (domain: acmeapp.io)
+```
+
+**Advantages**:
+- Clear separation of metrics
+- Different teams can own different workspaces
+- Isolated prompt strategies
+
+**Disadvantages**:
+- Must switch workspaces to compare brands
+- No cross-workspace reporting (yet)
+
+### Shared Access Patterns
+
+You can grant users access to multiple workspaces:
+
+```
+User: alice@acme.com
+├── Owner of Acme CRM workspace
+├── Member of Acme Analytics workspace
+└── No access to Acme Mobile workspace
+
+User: bob@acme.com
+├── Owner of all 3 workspaces (CMO)
+```
+
+Add Alice to multiple workspaces by inviting her email address to each workspace separately.
+
+## Access Control Patterns
+
+### Read-Only Access
+
+<Note>
+  OneGlance does not currently support a "Viewer" role. All members have read/write access to prompts and settings.
+
+  **Workaround for read-only users**:
+  - Export data (JSON/CSV) and share externally
+  - Use API keys (future feature) with read-only scopes
+  - Create a separate "reporting" workspace with limited prompts
+</Note>
+
+### Agency/Client Access
+
+If you're an agency managing OneGlance for clients:
+
+**Option 1: Separate Organizations**
+- Each client has their own organization
+- You (agency) are added as Owner to each client's workspaces
+- Client team members are Members
+
+**Option 2: Single Agency Organization**
+- Your agency owns the organization
+- Each client brand is a separate workspace
+- Client team members are Members
+- Easier for you to manage billing and access
+
+<Warning>
+  Option 2 means clients see ALL workspaces in the organization via the workspace switcher. If you need full isolation, use Option 1.
+</Warning>
+
+### External Consultant Access
+
+Grant temporary access via Member role:
+
+<Steps>
+  <Step title="Add Consultant as Member">
+    Invite via email or share workspace code.
+  </Step>
+
+  <Step title="Consultant Performs Work">
+    They can add prompts, run analysis, and export data.
+  </Step>
+
+  <Step title="Remove Access When Done">
+    Owner removes the consultant from the Members list.
+
+    <Tip>
+      Before removing, have the consultant export any analysis they need. Removed members lose all access immediately.
+    </Tip>
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Teammate can't join via workspace code">
+    **Possible causes**:
+    1. Code contains typos or extra spaces
+    2. They're entering an organization code instead of workspace code
+    3. Code was regenerated (future feature)
+
+    **Solution**:
+    - Re-copy the code from People page
+    - Verify format: `{brand-name}-{random-string}` (e.g., `acme-crm-x7j9k2`)
+    - Use email invite instead as a fallback
+  </Accordion>
+
+  <Accordion title="Member can't edit workspace settings">
+    **Expected behavior**: Only Owners can edit brand name, domain, or organization name.
+
+    **Solution**: An Owner must promote the Member to Owner (requires database access currently).
+  </Accordion>
+
+  <Accordion title="Can't remove an owner from the workspace">
+    **Expected behavior**: Owners cannot remove other owners via the UI.
+
+    **Reasoning**: Prevents accidental lockout if only one owner remains.
+
+    **Solution**: For self-hosted deployments, manually update the database:
+    ```sql
+    DELETE FROM workspace_members
+    WHERE user_id = '{userId}' AND workspace_id = '{workspaceId}' AND role = 'owner';
+    ```
+
+    Ensure at least one owner remains.
+  </Accordion>
+
+  <Accordion title="Conflicting prompt changes by multiple users">
+    **Scenario**: Two members edit prompts simultaneously.
+
+    **Behavior**: Last save wins. If Alice and Bob both modify prompts:
+    1. Alice saves → prompts updated
+    2. Bob saves → Bob's changes overwrite Alice's
+
+    **Solution**: Coordinate via communication ("I'm editing prompts now") or batch updates weekly as described in [Best Practices](#2-coordinate-prompt-additions).
+  </Accordion>
+
+  <Accordion title="User sees 'No workspace selected' after joining">
+    **Cause**: The workspace switcher is set to an invalid workspace ID.
+
+    **Solution**: Click the workspace switcher (top nav) and select the workspace they just joined.
+  </Accordion>
+</AccordionGroup>
+
+## Security Best Practices
+
+### 1. Limit Owner Count
+
+More owners = more risk of accidental deletions or configuration changes.
+
+<Tip>
+  Recommended: 2-3 owners maximum per workspace, even for large teams.
+</Tip>
+
+### 2. Rotate Workspace Codes
+
+<Note>
+  Code rotation is not yet implemented. For now, if a code is compromised:
+  - Review Members list for unauthorized users
+  - Remove unauthorized members
+  - Contact support to regenerate the code (self-hosted: update in database)
+</Note>
+
+### 3. Audit Member Access Quarterly
+
+Review the Members list every 3 months:
+- Remove former employees
+- Downgrade contractors who no longer need access
+- Verify Owner list is still accurate
+
+### 4. Be Careful with Brand Setting Changes
+
+Changing the brand name or domain erases analysis data. Document current settings before editing:
+
+```bash
+# Self-hosted users: backup workspace settings
+pg_dump -t workspaces -t workspace_members -f backup.sql oneglanse_db
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Managing Prompts" icon="messages" href="/guides/managing-prompts">
+    Coordinate prompt strategy across your team
+  </Card>
+
+  <Card title="Scheduling" icon="clock" href="/guides/scheduling">
+    Set up automated runs that align with team workflows
+  </Card>
+
+  <Card title="Interpreting Metrics" icon="chart-line" href="/guides/interpreting-metrics">
+    Share insights from GEO scores and competitive analysis
+  </Card>
+
+  <Card title="API Reference" icon="code" href="/api-reference/workspaces">
+    Programmatically manage team access and permissions
+  </Card>
+</CardGroup>
+
+## Related Concepts
+
+- [Setup Guide](/guides/setup) - Creating your first workspace
+- [Quickstart](/quickstart) - Account creation and authentication
+- [Local Setup](/development/local-setup) - Self-hosting for enterprise access control

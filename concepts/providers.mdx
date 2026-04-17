@@ -1,0 +1,478 @@
+---
+title: Providers
+description: Monitor ChatGPT, Claude, Perplexity, Gemini, and Google AI Overview with automated browser testing
+---
+
+## What are providers?
+
+Providers are the AI platforms that OneGlanse monitors for brand mentions. Each provider represents a different AI service that users interact with to get information, recommendations, and answers.
+
+OneGlanse supports five major AI providers:
+
+<CardGroup cols={2}>
+  <Card title="ChatGPT" icon="openai">
+    OpenAI's conversational AI assistant
+  </Card>
+  <Card title="Claude" icon="message">
+    Anthropic's AI assistant focused on helpful, honest, and harmless interactions
+  </Card>
+  <Card title="Perplexity" icon="magnifying-glass">
+    AI-powered search engine with real-time information
+  </Card>
+  <Card title="Gemini" icon="google">
+    Google's multimodal AI model and assistant
+  </Card>
+  <Card title="AI Overview" icon="sparkles">
+    Google's AI-generated summaries in search results
+  </Card>
+</CardGroup>
+
+## Why providers matter
+
+Different AI providers have different:
+
+**Knowledge sources** - Each provider trains on different datasets and accesses different information
+
+**Response styles** - Providers format answers differently (lists, paragraphs, comparative tables)
+
+**Citation practices** - Some providers extensively cite sources, others don't
+
+**Update frequencies** - Providers refresh their knowledge at different intervals
+
+**User bases** - Each platform serves different user demographics and use cases
+
+Monitoring multiple providers gives you comprehensive coverage of how AI represents your brand across the ecosystem.
+
+## How providers work
+
+### Provider architecture
+
+OneGlanse uses a **provider config system** that defines all provider-specific behavior in one place:
+
+```typescript
+interface ProviderConfig {
+  url: string;                // Landing URL for the provider
+  warmupDelayMs: number;      // Initial wait after page load
+  label: string;              // Short identifier (e.g., "ChatGPT")
+  displayName: string;        // UI-friendly name
+  skip?: boolean;             // Disable this provider
+  requiresWarmup: boolean;    // Pre-prompt editor preparation
+  
+  // Core operations
+  waitForResponse: (page: Page) => Promise<void>;
+  extractResponse: (page: Page) => Promise<string>;
+  extractSources: (page: Page) => Promise<Source[]>;
+  
+  // Optional hooks
+  beforeRetryHook?: (page: Page) => Promise<void>;
+  betweenPromptsHook?: (page: Page) => Promise<void>;
+  checkSubmitSuccess?: (page: Page, preSubmitUrl: string) => Promise<boolean | undefined>;
+  preNavigationHook?: (page: Page) => Promise<void>;
+  postNavigationHook?: (page: Page) => Promise<void>;
+}
+```
+
+This architecture makes adding new providers straightforward - create a config file and register it. No other code needs to change.
+
+### Provider registry
+
+All providers are registered in a central configuration:
+
+```typescript
+import { chatgptConfig } from "./chatgpt";
+import { claudeConfig } from "./claude";
+import { perplexityConfig } from "./perplexity";
+import { geminiConfig } from "./gemini";
+import { aiOverviewConfig } from "./ai-overview";
+
+export const PROVIDER_CONFIGS: Record<Provider, ProviderConfig> = {
+  "chatgpt": chatgptConfig,
+  "claude": claudeConfig,
+  "perplexity": perplexityConfig,
+  "gemini": geminiConfig,
+  "ai-overview": aiOverviewConfig,
+};
+```
+
+This single source of truth ensures consistent provider handling throughout the system.
+
+## Provider configurations
+
+### ChatGPT
+
+ChatGPT uses a conversational interface with streaming responses and optional source citations.
+
+```typescript
+export const chatgptConfig: ProviderConfig = {
+  url: "https://chatgpt.com/",
+  warmupDelayMs: 5000,
+  label: "ChatGPT",
+  displayName: "ChatGPT",
+  requiresWarmup: true,
+  
+  waitForResponse: (page) => waitForAssistantToFinish(page, "chatgpt"),
+  extractResponse: (page) => extractAssistantMarkdown(page, "chatgpt"),
+  
+  extractSources: async (page) => {
+    const btn = await findSourcesButton(page);
+    if (!btn) return [];
+    await openSourcesPanel(page, btn);
+    return extractSourcesFromChatgpt(page, btn);
+  },
+};
+```
+
+**Key characteristics**:
+- Requires editor warm-up before first prompt
+- Streaming text generation
+- Sources available via expandable panel
+- 5-second warmup delay
+
+### Claude
+
+Claude provides conversational AI with a clean interface and streaming responses.
+
+```typescript
+export const claudeConfig: ProviderConfig = {
+  url: "https://claude.ai/new",
+  warmupDelayMs: 5000,
+  skip: true,  // Currently disabled
+  label: "Claude",
+  displayName: "Claude",
+  requiresWarmup: true,
+  
+  waitForResponse: (page) => waitForAssistantToFinish(page, "claude"),
+  extractResponse: (page) => extractAssistantMarkdown(page, "claude"),
+  extractSources: async (_page) => [],  // No source citations
+};
+```
+
+**Key characteristics**:
+- Starts on new conversation page
+- No source citations (returns empty array)
+- Currently disabled in default configuration
+
+### Perplexity
+
+Perplexity is an AI search engine that extensively cites sources for its answers.
+
+```typescript
+export const perplexityConfig: ProviderConfig = {
+  url: "https://www.perplexity.ai/",
+  warmupDelayMs: 5000,
+  label: "Perplexity",
+  displayName: "Perplexity",
+  requiresWarmup: true,
+  
+  waitForResponse: (page) => waitForAssistantToFinish(page, "perplexity"),
+  extractResponse: (page) => extractAssistantMarkdown(page, "perplexity"),
+  
+  postNavigationHook: async (page) => {
+    // Anti-bot detection: randomized delays
+    const randomDelay = 2000 + Math.floor(Math.random() * 3000);
+    await page.waitForTimeout(randomDelay);
+    await page.waitForTimeout(1000 + Math.floor(Math.random() * 1000));
+  },
+  
+  extractSources: async (page) => {
+    const btn = await findSourcesButton(page);
+    if (!btn) return [];
+    await openSourcesPanel(page, btn);
+    return extractSourcesFromPerplexity(page);
+  },
+};
+```
+
+**Key characteristics**:
+- Real-time web search integration
+- Extensive source citations with numbered references
+- Randomized delays to avoid bot detection
+- Rich source metadata extraction
+
+### Gemini
+
+Google's Gemini provides multimodal AI capabilities with search integration.
+
+```typescript
+export const geminiConfig: ProviderConfig = {
+  url: "https://gemini.google.com/",
+  warmupDelayMs: 5000,
+  label: "Gemini",
+  displayName: "Gemini",
+  requiresWarmup: true,
+  
+  waitForResponse: (page) => waitForAssistantToFinish(page, "gemini"),
+  extractResponse: (page) => extractAssistantMarkdown(page, "gemini"),
+  
+  extractSources: async (page) => {
+    const btn = await findSourcesButton(page);
+    if (!btn) return [];
+    await openSourcesPanel(page, btn);
+    return extractSourcesFromGemini(page, btn);
+  },
+};
+```
+
+**Key characteristics**:
+- Google Search integration
+- Source citations available
+- Multimodal response support (text focus for OneGlanse)
+
+### AI Overview
+
+Google's AI Overview appears in search results, providing AI-generated summaries.
+
+```typescript
+export const aiOverviewConfig: ProviderConfig = {
+  url: "https://www.google.com/?hl=en&pws=0",
+  warmupDelayMs: 0,
+  label: "AI Overview",
+  displayName: "AI Overview",
+  requiresWarmup: false,
+  
+  waitForResponse: async (page) => {
+    await page
+      .locator(RESPONSE_CONTAINER_SELECTORS)
+      .first()
+      .waitFor({ state: "visible", timeout: 30000 })
+      .catch(() => {
+        throw new ExternalServiceError(
+          "ai-overview",
+          "AI Overview container not visible"
+        );
+      });
+  },
+  
+  extractResponse: async (page) => {
+    const html = await extractAIOverviewResponse(page);
+    return turndown.turndown(html);
+  },
+  
+  betweenPromptsHook: async (page) => {
+    const input = await findActiveEditor(page, "ai-overview").catch(() => null);
+    const cleared = input
+      ? await clearEditorInput(page, input, { dismissWithEscape: true })
+      : false;
+    
+    if (!cleared) {
+      await navigateWithRetry(page, BASE_URL, {
+        waitUntil: "domcontentloaded",
+        timeout: 30000,
+      });
+    }
+  },
+  
+  checkSubmitSuccess: async (page, preSubmitUrl) => {
+    const currentUrl = page.url();
+    if (currentUrl !== preSubmitUrl) {
+      const parsed = new URL(currentUrl);
+      if (parsed.searchParams.get("q")?.trim()) return true;
+    }
+    return undefined;
+  },
+  
+  postNavigationHook: async (page) => {
+    // Dismiss consent dialog
+    await page
+      .locator('button:has-text("Accept all"), button#L2AGLb')
+      .first()
+      .click({ timeout: 3000 })
+      .catch(() => null);
+  },
+  
+  extractSources: (page) => extractAIOverviewSources(page),
+};
+```
+
+**Key characteristics**:
+- Search-based interface (not chat)
+- No warmup required
+- Navigation-based submission (URL changes with `?q=` parameter)
+- Automatic consent dialog handling
+- Inline source citations within the AI Overview block
+
+## Browser automation
+
+OneGlanse uses **Playwright** to automate real browser sessions for each provider. This approach ensures:
+
+**Authentic responses** - Providers see real user interactions, not API calls
+
+**Complete feature support** - Access to all provider capabilities, including experimental features
+
+**Source extraction** - Ability to extract citation links and metadata
+
+**Anti-detection** - Mimics human behavior with randomized delays and real browser fingerprints
+
+### Execution flow
+
+For each prompt, OneGlanse:
+
+<Steps>
+  <Step title="Launch browser">
+    Start a Playwright browser session with the provider's URL:
+    
+    ```typescript
+    const config = PROVIDER_CONFIGS[provider];
+    await page.goto(config.url);
+    await page.waitForTimeout(config.warmupDelayMs);
+    ```
+  </Step>
+  
+  <Step title="Warm up editor">
+    For providers that require it, prepare the input editor:
+    
+    ```typescript
+    if (config.requiresWarmup) {
+      await warmUpEditor(page);
+    }
+    ```
+  </Step>
+  
+  <Step title="Submit prompt">
+    Type and submit the prompt through the provider's interface:
+    
+    ```typescript
+    await askPrompt(page, prompt, provider);
+    ```
+  </Step>
+  
+  <Step title="Wait for completion">
+    Use provider-specific logic to detect when streaming finishes:
+    
+    ```typescript
+    await config.waitForResponse(page);
+    ```
+  </Step>
+  
+  <Step title="Extract data">
+    Extract the response text and sources:
+    
+    ```typescript
+    const response = await config.extractResponse(page);
+    const sources = await config.extractSources(page);
+    ```
+  </Step>
+</Steps>
+
+## Source citations
+
+Providers handle source citations differently:
+
+<AccordionGroup>
+  <Accordion title="ChatGPT - Optional citations">
+    ChatGPT sometimes includes a "Sources" button that opens a panel with citations:
+    
+    ```typescript
+    interface Source {
+      title: "OpenAI Documentation";
+      cited_text: "OpenAI provides API access to GPT models...";
+      url: "https://platform.openai.com/docs";
+      domain: "platform.openai.com";
+      favicon: "https://platform.openai.com/favicon.ico";
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Claude - No citations">
+    Claude does not provide source citations. The `extractSources` function returns an empty array.
+  </Accordion>
+  
+  <Accordion title="Perplexity - Numbered citations">
+    Perplexity extensively cites sources with numbered references:
+    
+    ```text Example
+    The best project management tools include Asana[1], Monday.com[2], 
+    and Jira[3]. Each offers different strengths...
+    
+    Sources:
+    [1] https://asana.com/guide - "Asana Features Guide"
+    [2] https://monday.com/features - "Monday.com Overview"
+    [3] https://atlassian.com/jira - "Jira for Software Teams"
+    ```
+  </Accordion>
+  
+  <Accordion title="Gemini - Search citations">
+    Gemini includes sources from Google Search integration, available through an expandable panel.
+  </Accordion>
+  
+  <Accordion title="AI Overview - Inline citations">
+    AI Overview embeds source links directly in the response text:
+    
+    ```text Example
+    Project management tools like Asana (asana.com) and Monday.com 
+    (monday.com) help teams collaborate effectively.
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Provider-specific considerations
+
+### Rate limiting
+
+Providers may rate-limit automated requests. OneGlanse handles this through:
+
+- **Randomized delays** - Vary timing between requests
+- **Retry policies** - Exponential backoff on failures
+- **Proxy rotation** - Distribute requests across IP addresses
+
+### Response validation
+
+Each response is validated before storage:
+
+```typescript
+// Empty responses trigger retries
+if (!response || response.trim().length === 0) {
+  throw new ExternalServiceError(provider, "Empty response");
+}
+
+// Provider-specific validation rules
+const validation = validateResponse(response, provider);
+if (!validation.valid) {
+  throw new ValidationError(`Invalid response: ${validation.reason}`);
+}
+```
+
+### Error handling
+
+Providers can fail for various reasons:
+
+- Network timeouts
+- Bot detection
+- Interface changes
+- Service outages
+
+OneGlanse implements automatic retry logic with provider-specific recovery strategies defined in `beforeRetryHook`.
+
+## Enabling and disabling providers
+
+You can control which providers run for each workspace:
+
+```typescript
+// Enable all providers (default)
+enabledProviders: '["chatgpt","claude","perplexity","gemini","ai-overview"]'
+
+// Enable only search-focused providers
+enabledProviders: '["perplexity","ai-overview"]'
+
+// Enable only conversational AI
+enabledProviders: '["chatgpt","claude","gemini"]'
+```
+
+Disabling providers in your workspace configuration prevents them from running during scheduled jobs, saving resources and focusing on the platforms most relevant to your audience.
+
+## Related resources
+
+<CardGroup cols={2}>
+  <Card title="Workspaces" icon="briefcase" href="/concepts/workspaces">
+    Configure which providers to monitor per workspace
+  </Card>
+  <Card title="Prompts" icon="message" href="/concepts/prompts">
+    Learn how prompts are executed across providers
+  </Card>
+  <Card title="Adding Providers" icon="plus" href="/development/adding-providers">
+    Developer guide for adding new AI providers
+  </Card>
+  <Card title="Agent Worker" icon="robot" href="/development/agent-worker">
+    Technical details of browser automation architecture
+  </Card>
+</CardGroup>

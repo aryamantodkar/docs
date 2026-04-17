@@ -1,0 +1,136 @@
+{
+  "projectType": "saas",
+  "projectName": "OneGlanse",
+  "projectDescription": "Track how AI providers mention your brand by running scheduled prompts across LLMs and analyzing visibility, sentiment, and position metrics.",
+  "theme": "mint",
+  "primaryColor": "#4F46E5",
+  "lightColor": "#818CF8",
+  "darkColor": "#3730A3",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/workspaces",
+              "concepts/prompts",
+              "concepts/providers",
+              "concepts/analysis"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/setup",
+              "guides/managing-prompts",
+              "guides/scheduling",
+              "guides/team-collaboration",
+              "guides/interpreting-metrics"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Architecture",
+            "pages": [
+              "development/overview",
+              "development/monorepo-structure",
+              "development/tech-stack"
+            ]
+          },
+          {
+            "group": "Setup & Deployment",
+            "pages": [
+              "development/local-setup",
+              "development/environment-variables",
+              "development/docker-compose"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "development/web-app",
+              "development/agent-worker",
+              "development/services-layer",
+              "development/database"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "development/contributing",
+              "development/adding-providers"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "tRPC API",
+            "pages": [
+              "api/overview",
+              "api/workspace",
+              "api/prompts",
+              "api/analysis",
+              "api/agent"
+            ]
+          },
+          {
+            "group": "Services",
+            "pages": [
+              "api/services/workspace",
+              "api/services/prompt",
+              "api/services/analysis",
+              "api/services/agent"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types/agent",
+              "api/types/analysis",
+              "api/types/entities"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-provider AI monitoring (ChatGPT, Claude, Perplexity, Gemini, Google AI Overview)",
+    "Automated browser sessions with Playwright for authentic prompt responses",
+    "Scheduled prompt execution with BullMQ and Redis queues",
+    "Sentiment and visibility analysis with OpenAI",
+    "Team workspaces with role-based access control",
+    "Real-time metrics dashboard with historical tracking",
+    "Source citation extraction and analysis",
+    "Cron-based scheduling with customizable frequency"
+  ],
+  "publicApiSurface": [
+    "workspace.create",
+    "workspace.list",
+    "workspace.updateSettings",
+    "workspace.inviteMember",
+    "prompt.store",
+    "prompt.list",
+    "prompt.fetchResponses",
+    "analysis.run",
+    "analysis.fetchAnalysed",
+    "agent.submitJobGroup",
+    "agent.getQueueStatus"
+  ]
+}

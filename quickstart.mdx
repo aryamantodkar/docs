@@ -1,0 +1,252 @@
+---
+title: "Quickstart"
+description: "Get started with OneGlanse and track your first AI mentions in minutes"
+---
+
+## Overview
+
+This guide walks you through creating your first workspace, adding prompts, scheduling automated runs, and viewing analysis results.
+
+<Note>
+  This quickstart assumes you have access to a running OneGlanse instance. For local development setup, see [Local Setup](/development/local-setup).
+</Note>
+
+## Step 1: Create your workspace
+
+Workspaces organize monitoring by brand. Each workspace has its own prompts, schedule, and team members.
+
+<Steps>
+  <Step title="Sign up or log in">
+    Navigate to your OneGlanse instance and authenticate using Google OAuth (configured via Better Auth).
+  </Step>
+  <Step title="Create a new workspace">
+    Click **Create Workspace** and provide:
+    
+    - **Name**: Your brand or product name (e.g., "Acme Inc")
+    - **Domain**: Your primary website domain (e.g., "acme.com")
+    - **Slug**: URL-friendly identifier (e.g., "acme-inc")
+    
+    The domain is used in brand analysis to identify your brand in AI responses.
+  </Step>
+  <Step title="Configure providers">
+    Select which AI providers to monitor:
+    
+    - ChatGPT (OpenAI)
+    - Claude (Anthropic)
+    - Perplexity
+    - Gemini (Google)
+    - AI Overview (Google Search)
+    
+    <Tip>Start with 2-3 providers to get faster results, then expand.</Tip>
+  </Step>
+</Steps>
+
+## Step 2: Add prompts
+
+Prompts represent how users might ask about your product category. These are the queries OneGlanse will test across AI providers.
+
+<Steps>
+  <Step title="Navigate to Prompts">
+    In your workspace, go to the **Prompts** page.
+  </Step>
+  <Step title="Click Add Prompt">
+    Enter a prompt that represents a common user query in your category.
+    
+    **Good prompt examples**:
+    
+    - "What are the best project management tools for remote teams?"
+    - "Which CRM software should I use for a small business?"
+    - "What's the most reliable email marketing platform?"
+    
+    **Avoid overly specific prompts**:
+    
+    - ❌ "Tell me about Acme Inc" (too direct)
+    - ❌ "What does acme.com do?" (too branded)
+  </Step>
+  <Step title="Add multiple prompts">
+    Click **Add Prompt** to create 3-5 prompts covering different angles:
+    
+    - Comparison queries ("best tools for X")
+    - Problem-solving queries ("how to solve Y")
+    - Feature queries ("tools with Z feature")
+    
+    <Warning>
+      Each prompt runs across all enabled providers on every scheduled execution. More prompts = longer execution time.
+    </Warning>
+  </Step>
+  <Step title="Save your prompts">
+    Click **Save Changes** to persist your prompts to the database.
+  </Step>
+</Steps>
+
+## Step 3: Schedule automated runs
+
+OneGlanse uses cron schedules to automate prompt execution across all providers.
+
+<Steps>
+  <Step title="Navigate to Schedule">
+    Go to the **Schedule** page in your workspace.
+  </Step>
+  <Step title="Choose a frequency">
+    Select how often prompts should run:
+    
+    - **Every 12 hours**: Twice daily (good for active monitoring)
+    - **Every day at midnight**: Once daily (balanced approach)
+    - **Every 2 days at midnight**: Less frequent (cost-effective)
+    - **Every week (Sunday midnight)**: Weekly snapshots
+    
+    <Note>
+      Times are displayed in your local timezone but stored as UTC in the database.
+    </Note>
+  </Step>
+  <Step title="Save schedule">
+    Click **Save Schedule**. OneGlanse will:
+    
+    1. Run prompts immediately for the first execution
+    2. Queue jobs for each provider in Redis/BullMQ
+    3. Agent workers will consume jobs and execute prompts in real browsers
+    4. Follow the cron schedule for future runs
+  </Step>
+  <Step title="Monitor execution">
+    Check the **Last Prompt Run** timestamp to confirm execution started.
+    
+    <Tip>
+      Initial runs take 2-5 minutes per provider depending on response complexity and browser automation timing.
+    </Tip>
+  </Step>
+</Steps>
+
+## Step 4: View results
+
+Once prompts execute and responses are analyzed, view insights in the Dashboard and Prompts pages.
+
+<Steps>
+  <Step title="Navigate to Dashboard">
+    Go to the **Dashboard** page to see aggregated metrics:
+    
+    - **Presence Rate**: Percentage of responses mentioning your brand
+    - **Average Rank**: Your position when AI lists alternatives
+    - **Top Source**: Most-cited source domain for your brand
+    - **Top Competitor**: Most frequently mentioned competitor
+    
+    Use model and time filters to narrow results.
+  </Step>
+  <Step title="View prompt details">
+    Go to the **Prompts** page to see performance by prompt:
+    
+    - **GEO Score**: Overall brand performance (0-100)
+    - **Sentiment**: How favorably your brand is portrayed
+    - **Visibility**: Prominence of your brand mention (0-100%)
+    - **Position**: Rank in lists (1 = top position)
+    
+    Click a prompt row to expand and see full responses per provider.
+  </Step>
+  <Step title="Analyze responses">
+    In the prompt detail view:
+    
+    - Read the full AI response
+    - See extracted metrics (GEO Score, sentiment, visibility, position)
+    - View cited sources with links
+    - Check if analysis is complete ("Analysis in progress..." if pending)
+  </Step>
+  <Step title="Export data">
+    Use the **Export** button to download:
+    
+    - **JSON**: Full analysis data with metadata and recommendations
+    - **CSV**: Tabular data for Excel/Sheets analysis
+  </Step>
+</Steps>
+
+## Understanding your first results
+
+### If your brand is mentioned
+
+Look for:
+
+- **High GEO Score (60+)**: Your brand has strong visibility
+- **Top 3 position**: You're prominently recommended
+- **Positive sentiment (70+)**: AI portrays you favorably
+- **High visibility (70%+)**: Your mention is prominent in the response
+
+### If your brand is NOT mentioned
+
+This is common and expected. It means:
+
+- AI providers don't yet associate your brand with this query
+- Your content may not be indexed or prioritized by AI training data
+- Competitors have stronger signals for this query
+
+**Next steps**:
+
+- Refine prompts to be more specific to your niche
+- Create content that targets these queries (GEO optimization)
+- Track competitors to understand what they're doing differently
+
+<Warning>
+  Brand analysis defaults to zero values when your brand is not mentioned. This is intentional and not an error.
+</Warning>
+
+## What's next?
+
+<CardGroup cols={2}>
+  <Card title="Understand workspaces" icon="briefcase" href="/concepts/workspaces">
+    Learn about workspace organization, team members, and role management.
+  </Card>
+  <Card title="Prompt best practices" icon="message" href="/guides/managing-prompts">
+    Write effective prompts that surface meaningful brand mentions.
+  </Card>
+  <Card title="Interpret metrics" icon="chart-line" href="/guides/interpreting-metrics">
+    Deep dive into GEO Score, sentiment, visibility, and position metrics.
+  </Card>
+  <Card title="Team collaboration" icon="users" href="/guides/team-collaboration">
+    Invite team members and manage workspace permissions.
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Prompts aren't running">
+    Check:
+    
+    - Schedule is enabled in **Schedule** page
+    - **Last Prompt Run** timestamp updates after schedule time
+    - Agent workers are running (`pnpm dev:agent` in development)
+    - Redis is accessible and BullMQ queues are healthy
+  </Accordion>
+  <Accordion title="Analysis is stuck on 'in progress'">
+    Analysis runs asynchronously after responses are captured. If stuck:
+    
+    - Wait 2-5 minutes for OpenAI analysis to complete
+    - Check that `OPENAI_API_KEY` is configured in environment
+    - Review agent worker logs for analysis job errors
+  </Accordion>
+  <Accordion title="Brand not mentioned in any responses">
+    This is normal if:
+    
+    - Your brand is new or has low visibility
+    - Prompts are too broad or not relevant to your niche
+    - AI training data doesn't include strong signals for your brand
+    
+    Try:
+    
+    - More specific prompts targeting your exact use case
+    - Including your brand's primary keywords in prompts
+    - Testing different provider combinations
+  </Accordion>
+  <Accordion title="Responses are empty or incomplete">
+    Browser automation can fail due to:
+    
+    - Provider UI changes (prompts may need updating)
+    - Rate limiting or bot detection
+    - Network timeouts
+    
+    Check agent worker logs for Playwright errors.
+  </Accordion>
+</AccordionGroup>
+
+## Need help?
+
+<Card title="Join the community" icon="github" href="https://github.com/aryamantodkar/oneglanse">
+  Report issues, request features, or contribute to OneGlanse on GitHub.
+</Card>

@@ -1,0 +1,564 @@
+---
+title: Analysis Service
+description: Analyze AI responses for brand visibility, sentiment, and GEO optimization insights
+---
+
+The Analysis service evaluates how brands appear in AI-generated responses using sophisticated GEO (Generative Engine Optimization) metrics. It processes prompt responses through GPT-4 to extract visibility scores, sentiment analysis, competitor comparisons, and actionable recommendations.
+
+## Core Functions
+
+### Analysis Execution
+
+#### runAnalysis
+
+Analyzes a single prompt/response pair to generate comprehensive brand intelligence metrics.
+
+```typescript
+import { runAnalysis } from "@oneglanse/services";
+import type { AnalysisInputSingle, BrandAnalysisResult } from "@oneglanse/types";
+
+const result: BrandAnalysisResult = await runAnalysis({
+  brandName: "HubSpot",
+  brandDomain: "hubspot.com",
+  prompt: "What are the best CRM tools for small businesses?",
+  response: "For small businesses, HubSpot offers excellent value..." // AI response
+});
+
+console.log(`GEO Score: ${result.geoScore.overall}/100`);
+console.log(`Visibility: ${result.presence.visibility}`);
+console.log(`Sentiment: ${result.sentiment.score}`);
+console.log(`Rank: #${result.position.rankPosition} of ${result.position.totalRanked}`);
+```
+
+<ParamField path="input" type="AnalysisInputSingle" required>
+  <Expandable title="properties">
+    <ParamField path="brandName" type="string" required>
+      Brand name to analyze (e.g., "HubSpot")
+    </ParamField>
+    <ParamField path="brandDomain" type="string" required>
+      Primary domain (e.g., "hubspot.com")
+    </ParamField>
+    <ParamField path="prompt" type="string" required>
+      User prompt sent to the AI model
+    </ParamField>
+    <ParamField path="response" type="string" required>
+      AI-generated response to analyze
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="result" type="BrandAnalysisResult">
+  Comprehensive analysis object containing:
+  
+  **geoScore** (GEO Performance)
+  - `overall`: 0-100 composite score
+  - `verdict`: One-sentence evidence-based summary
+  
+  **presence** (Brand Visibility)
+  - `mentioned`: Boolean - brand appears in response
+  - `mentionCount`: Number of times brand is referenced
+  - `visibility`: 0-100 weighted visibility score
+  - `prominence`: "dominant" | "significant" | "moderate" | "minor" | "passing" | "absent"
+  - `firstMentionPosition`: "top" | "middle" | "bottom" | "absent"
+  
+  **position** (Ranking Metrics)
+  - `rankPosition`: Absolute rank (1-indexed) or null
+  - `totalRanked`: Total brands in response
+  - `isTopPick`: Boolean - explicitly marked as #1 choice
+  - `isTopThree`: Boolean - ranks in top 3
+  - `rankingContext`: Description of ranking category
+  
+  **sentiment** (Tone Analysis)
+  - `score`: 0-100 sentiment score
+  - `label`: "very_negative" | "negative" | "neutral" | "positive" | "very_positive"
+  - `positives`: Array of positive phrases from response
+  - `negatives`: Array of negative phrases from response
+  
+  **recommendation** (How Brand is Recommended)
+  - `type`: "top_pick" | "strong_alternative" | "conditional" | "mentioned_only" | "discouraged" | "not_mentioned"
+  - `bestFor`: Array of use cases/audiences
+  - `caveats`: Array of limitations/conditions
+  
+  **competitors** (Competitor Analysis)
+  - Array of competitor objects with:
+    - `name`: Competitor brand name
+    - `domain`: Competitor domain
+    - `visibility`: 0-100 visibility score
+    - `sentiment`: 0-100 sentiment score
+    - `rankPosition`: Absolute rank
+    - `isRecommended`: Boolean
+    - `winsOver`: Areas where competitor beats target brand
+    - `losesTo`: Areas where target brand wins
+  
+  **perception** (Brand Positioning)
+  - `coreClaims`: Key statements about the brand
+  - `differentiators`: What sets brand apart
+  - `bestKnownFor`: Primary association (single phrase)
+  - `pricingPerception`: "premium" | "mid_range" | "budget" | "free" | "not_mentioned"
+  
+  **risks** (Issues & Concerns)
+  - `hasRisks`: Boolean
+  - `items`: Array of risk objects:
+    - `type`: "outdated_info" | "factual_error" | "brand_confusion" | "negative_association" | "missing_from_response"
+    - `severity`: "critical" | "warning" | "info"
+    - `detail`: Specific description
+  
+  **actions** (Recommendations)
+  - Array of action objects:
+    - `priority`: "critical" | "high" | "medium" | "low"
+    - `recommendation`: Specific, actionable advice
+  
+  **metadata** (Analysis Context)
+  - `brandName`: Brand analyzed
+  - `brandDomain`: Domain analyzed
+  - `prompt`: Original prompt
+  - `prompt_id`: Prompt UUID (if available)
+  - `analyzedAt`: ISO timestamp
+</ResponseField>
+
+**Analysis Model:** GPT-4.1 with temperature 0, JSON output format
+
+**Analysis Methodology:**
+Uses a comprehensive 494-line analysis prompt that enforces:
+- Zero hallucination policy (every metric must be traceable to response text)
+- Anti-inflation scoring rules (resists AI tendency to over-score)
+- Five-dimension visibility calculation (Coverage, Placement, Structural Prominence, Frequency, Contextual Framing)
+- Absolute ranking (not local category ranks)
+- Cross-validation checks (15+ consistency rules)
+- Evidence-first approach (defaults to conservative values)
+
+**Throws:**
+- `ExternalServiceError`: If ChatGPT API call fails (502 status)
+- `ValidationError`: If response JSON is invalid
+
+---
+
+#### analysePromptsForWorkspace
+
+Batch-processes unanalyzed prompt responses for a workspace, storing results in ClickHouse.
+
+```typescript
+import { analysePromptsForWorkspace } from "@oneglanse/services";
+
+const result = await analysePromptsForWorkspace({
+  workspaceId: "workspace_abc123",
+  batchSize: 50,        // Optional: responses per batch
+  analyzeAll: true      // Optional: process all or just first batch
+});
+
+console.log(`Analyzed: ${result.analysedCount}`);
+console.log(`Failed: ${result.failedCount}`);
+console.log(`Remaining: ${result.remainingCount}`);
+
+if (result.errors.length > 0) {
+  console.log("Errors:");
+  result.errors.forEach(e => {
+    console.log(`  ${e.modelProvider}: ${e.error}`);
+  });
+}
+```
+
+<ParamField path="args" type="object" required>
+  <Expandable title="properties">
+    <ParamField path="workspaceId" type="string" required>
+      Workspace to analyze
+    </ParamField>
+    <ParamField path="batchSize" type="number" default={50}>
+      Number of responses to process per batch
+    </ParamField>
+    <ParamField path="analyzeAll" type="boolean" default={false}>
+      If true, processes all unanalyzed responses. If false, stops after first batch.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="result" type="object">
+  - `analysedCount`: Number of successfully analyzed responses
+  - `failedCount`: Number of failed analyses
+  - `errors`: Array of error objects with `responseId`, `modelProvider`, `error`
+  - `remainingCount`: Number of unanalyzed responses still in queue
+</ResponseField>
+
+**Behavior:**
+1. Queries `analytics.prompt_responses` for rows where `is_analysed = false`
+2. Fetches workspace details (brand name, domain)
+3. For each response:
+   - Calls `runAnalysis()` with brand and response data
+   - Stores result in `analytics.prompt_analysis`
+   - Marks response as analyzed via `ALTER TABLE UPDATE`
+4. Uses offset-based pagination to handle ClickHouse async mutations
+5. Waits 100ms between batches to allow mutations to complete
+6. Continues until no unanalyzed responses remain (if `analyzeAll: true`)
+
+**Error Handling:**
+- Individual analysis failures are logged and collected in `errors` array
+- Does not throw on individual failures
+- Continues processing remaining responses
+- Returns detailed error information for debugging
+
+**Performance:**
+- Default batch size: 50 responses
+- Sequential analysis (not parallelized to avoid rate limits)
+- Typical speed: ~2-3 seconds per response (GPT-4 latency)
+
+---
+
+### Analysis Retrieval
+
+#### fetchAnalysedPrompts
+
+Retrieves all prompt responses with their analysis data (analyzed and unanalyzed).
+
+```typescript
+import { fetchAnalysedPrompts } from "@oneglanse/services";
+
+const records = await fetchAnalysedPrompts({
+  workspaceId: "workspace_abc123",
+  limit: 10000  // Optional, defaults to 10,000
+});
+
+records.forEach(record => {
+  console.log(`Prompt: ${record.prompt}`);
+  console.log(`Provider: ${record.model_provider}`);
+  
+  if (record.brand_analysis) {
+    const analysis = record.brand_analysis;
+    console.log(`  GEO Score: ${analysis.geoScore.overall}`);
+    console.log(`  Visibility: ${analysis.presence.visibility}`);
+    console.log(`  Sentiment: ${analysis.sentiment.score}`);
+  } else {
+    console.log(`  (Not yet analyzed)`);
+  }
+});
+```
+
+<ParamField path="args" type="object" required>
+  <Expandable title="properties">
+    <ParamField path="workspaceId" type="string" required>
+      Workspace ID
+    </ParamField>
+    <ParamField path="limit" type="number" default={10000}>
+      Maximum records to return
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="records" type="AnalysisRecord[]">
+  Array of analysis records with:
+  - `id`: Response UUID
+  - `prompt_id`: Prompt UUID
+  - `prompt`: Prompt text
+  - `prompt_run_at`: Execution timestamp
+  - `user_id`: User ID
+  - `workspace_id`: Workspace ID
+  - `model_provider`: Provider name
+  - `response`: AI response text
+  - `sources`: Array of source objects
+  - `brand_analysis`: BrandAnalysisResult object (or undefined if not analyzed)
+  - `created_at`: Storage timestamp
+  - `is_analysed`: Boolean flag
+</ResponseField>
+
+**Query Strategy:**
+- Joins `analytics.prompt_responses` with `analytics.prompt_analysis`
+- Uses LEFT JOIN to include unanalyzed responses
+- Orders by `prompt_run_at DESC` (most recent first)
+- Handles empty/malformed JSON gracefully
+
+---
+
+#### getLastPromptRunTime
+
+Retrieves the timestamp of the most recent prompt execution for a workspace.
+
+```typescript
+import { getLastPromptRunTime } from "@oneglanse/services";
+
+const lastRun = await getLastPromptRunTime({
+  workspaceId: "workspace_abc123"
+});
+
+if (lastRun) {
+  console.log(`Last run: ${new Date(lastRun).toLocaleString()}`);
+} else {
+  console.log("No prompts have been run yet");
+}
+```
+
+<ParamField path="args.workspaceId" type="string" required>
+  Workspace ID
+</ParamField>
+
+<ResponseField name="timestamp" type="string | null">
+  ISO timestamp of last prompt run, or null if no runs exist
+</ResponseField>
+
+---
+
+### Analysis Management
+
+#### resetWorkspaceAnalysis
+
+Clears all analysis data for a workspace while preserving raw prompt responses.
+
+```typescript
+import { resetWorkspaceAnalysis } from "@oneglanse/services";
+
+await resetWorkspaceAnalysis({
+  workspaceId: "workspace_abc123"
+});
+
+console.log("Analysis reset - responses will be re-analyzed on next run");
+```
+
+<ParamField path="args.workspaceId" type="string" required>
+  Workspace to reset
+</ParamField>
+
+**Behavior:**
+1. Deletes all rows from `analytics.prompt_analysis` for the workspace
+2. Sets `is_analysed = false` on all rows in `analytics.prompt_responses`
+3. Does NOT delete prompt responses or user prompts
+4. Allows re-analysis with updated logic/prompts
+
+**Use Cases:**
+- Brand name or domain changed (called automatically by `updateWorkspaceDetails`)
+- Analysis logic updated and historical data should be reprocessed
+- Manual reset requested by user
+
+---
+
+## Analysis Prompt Engineering
+
+The analysis uses a highly sophisticated 494-line prompt (see `analysisPrompt.ts:6-493`) that implements:
+
+### Core Principles
+1. **Zero Hallucination Policy** - Every metric must be traceable to response text
+2. **Quote-or-Default** - Before scoring, mentally quote the justifying passage
+3. **Literal Reading** - No inference beyond what's explicitly stated
+4. **Anti-Inflation Mandate** - Actively resist over-scoring
+5. **Evidence-First** - Positive scores require explicit evidence
+
+### Visibility Calculation (5 Dimensions)
+
+**A. Coverage (25%)** - Space occupied
+- 0-5: Name-drop only
+- 16-30: Short paragraph
+- 51-75: Primary subject
+- 76-100: Dominates response
+
+**B. Placement (25%)** - Position in response
+- 90-100: First sentence
+- 70-89: First quarter
+- 40-69: Middle
+- 15-39: Last quarter
+
+**C. Structural Prominence (20%)** - High-attention positions
+- 80-100: Heading/title/top pick slot
+- 60-79: Top 3 list item
+- 40-59: Lower list item
+- 20-39: Inline prose
+
+**D. Frequency (15%)** - Mention count
+- 80-100: 6+ mentions
+- 60-79: 4-5 mentions
+- 40-59: 2-3 mentions
+- 20-39: 1 mention
+
+**E. Contextual Framing (15%)** - Role in response
+- 90-100: Direct answer
+- 70-89: Actively recommended
+- 50-69: Compared with peers
+- 30-49: Context/background
+
+**Formula:**
+```typescript
+visibility = round(
+  (A × 0.25) + (B × 0.25) + (C × 0.20) + (D × 0.15) + (E × 0.15)
+)
+```
+
+### GEO Score Calculation
+
+```typescript
+overall = round(
+  (visibility × 0.25) +
+  (rankValue × 0.25) +      // #1→100, #2→80, #3→65, #4→50...
+  (sentiment × 0.25) +
+  (recommendationValue × 0.25)  // top_pick→100, strong_alternative→80...
+)
+```
+
+### Absolute Ranking Rules
+
+Rankings reflect **reading order across entire response**, not local category positions.
+
+**Example:**
+```
+Best for Small Teams:
+  1. HubSpot      → Absolute rank: 1
+  2. Pipedrive    → Absolute rank: 2
+  3. Freshsales   → Absolute rank: 3
+
+Best for Enterprise:
+  1. Salesforce   → Absolute rank: 4 (not 1!)
+  2. Dynamics     → Absolute rank: 5
+```
+
+### Cross-Validation Checks
+
+The prompt enforces 18 consistency rules before outputting, including:
+- If not mentioned → overall = 0, visibility = 0, sentiment = 50
+- If sentiment ≥ 60 → positives[] must be non-empty
+- If isTopPick = true → rankPosition = 1, overall ≥ 60
+- Prominence must match visibility score range
+- Target brand must NOT appear in competitors array
+
+---
+
+## Usage in tRPC Routers
+
+Example from `apps/web/src/server/api/routers/analysis/analysis.ts`:
+
+```typescript
+import { 
+  analysePromptsForWorkspace,
+  fetchAnalysedPrompts 
+} from "@oneglanse/services";
+import { authorizedWorkspaceProcedure } from "../../procedures";
+import { z } from "zod";
+
+export const analysisRouter = createTRPCRouter({
+  analyzeMetrics: authorizedWorkspaceProcedure
+    .input(z.object({
+      analyzeAll: z.boolean().optional().default(true)
+    }))
+    .mutation(async ({ ctx, input }) => {
+      return analysePromptsForWorkspace({
+        workspaceId: ctx.workspaceId,
+        analyzeAll: input.analyzeAll ?? true,
+      });
+    }),
+
+  fetchAnalysis: authorizedWorkspaceProcedure.query(async ({ ctx }) => {
+    return fetchAnalysedPrompts({ 
+      workspaceId: ctx.workspaceId 
+    });
+  }),
+});
+```
+
+---
+
+## ClickHouse Schema
+
+### analytics.prompt_analysis
+
+```sql
+CREATE TABLE analytics.prompt_analysis (
+  id String,
+  prompt_id String,
+  workspace_id String,
+  prompt String,
+  user_id String,
+  model_provider String,
+  brand_analysis String,  -- JSON serialized BrandAnalysisResult
+  prompt_run_at DateTime,
+  created_at DateTime DEFAULT now()
+) ENGINE = MergeTree()
+ORDER BY (workspace_id, prompt_run_at, model_provider);
+```
+
+**Join Key:** `(prompt_id, prompt_run_at, model_provider, workspace_id)` uniquely identifies a response
+
+---
+
+## Type Definitions
+
+```typescript
+import type {
+  AnalysisInputSingle,
+  BrandAnalysisResult,
+  PromptAnalysis,
+  AnalysisRecord,
+} from "@oneglanse/types";
+
+interface BrandAnalysisResult {
+  geoScore: {
+    overall: number;        // 0-100
+    verdict: string;
+  };
+  presence: {
+    mentioned: boolean;
+    mentionCount: number;
+    visibility: number;     // 0-100
+    prominence: "dominant" | "significant" | "moderate" | "minor" | "passing" | "absent";
+    firstMentionPosition: "top" | "middle" | "bottom" | "absent";
+  };
+  position: {
+    rankPosition: number | null;
+    totalRanked: number | null;
+    isTopPick: boolean;
+    isTopThree: boolean;
+    rankingContext: string | null;
+  };
+  sentiment: {
+    score: number;          // 0-100
+    label: "very_negative" | "negative" | "neutral" | "positive" | "very_positive";
+    positives: string[];
+    negatives: string[];
+  };
+  recommendation: {
+    type: "top_pick" | "strong_alternative" | "conditional" | "mentioned_only" | "discouraged" | "not_mentioned";
+    bestFor: string[];
+    caveats: string[];
+  };
+  competitors: Array<{
+    name: string;
+    domain: string | null;
+    visibility: number;
+    sentiment: number;
+    rankPosition: number | null;
+    isRecommended: boolean;
+    winsOver: string[];
+    losesTo: string[];
+  }>;
+  perception: {
+    coreClaims: string[];
+    differentiators: string[];
+    bestKnownFor: string | null;
+    pricingPerception: "premium" | "mid_range" | "budget" | "free" | "not_mentioned";
+  };
+  risks: {
+    hasRisks: boolean;
+    items: Array<{
+      type: "outdated_info" | "factual_error" | "brand_confusion" | "negative_association" | "missing_from_response";
+      severity: "critical" | "warning" | "info";
+      detail: string;
+    }>;
+  };
+  actions: Array<{
+    priority: "critical" | "high" | "medium" | "low";
+    recommendation: string;
+  }>;
+  metadata?: {
+    brandName: string;
+    brandDomain: string;
+    prompt: string;
+    prompt_id: string | null;
+    analyzedAt: string;
+  };
+}
+```
+
+---
+
+## Source Files
+
+- `packages/services/src/analysis/runAnalysis.ts` - Core analysis engine
+- `packages/services/src/analysis/analysisPrompt.ts` - 494-line analysis prompt
+- `packages/services/src/analysis/analysePromptsForWorkspace.ts` - Batch processing
+- `packages/services/src/analysis/fetchAnalysedPrompts.ts` - Data retrieval
+- `packages/services/src/analysis/resetWorkspaceAnalysis.ts` - Reset logic
+
+All exports are re-exported through `packages/services/src/analysis/index.ts`.

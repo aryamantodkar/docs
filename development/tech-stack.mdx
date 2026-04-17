@@ -1,0 +1,857 @@
+---
+title: 'Tech Stack'
+description: 'Comprehensive guide to technologies, frameworks, and tools used in OneGlance'
+---
+
+# Tech Stack
+
+OneGlance is built with modern, production-ready technologies chosen for type safety, developer experience, and scalability.
+
+## Overview
+
+| Category | Technology | Version | Why Chosen |
+|----------|------------|---------|------------|
+| **Monorepo** | Turborepo | 2.3.3 | Fast incremental builds with caching |
+| **Package Manager** | pnpm | 10.16.0 | Disk-efficient, strict dependencies |
+| **Runtime** | Node.js | 20+ | Required for Next.js 15 |
+| **Language** | TypeScript | 5.9.3 | Type safety across entire stack |
+| **Web Framework** | Next.js | 15.5.5 | App Router, RSC, built-in optimizations |
+| **API Layer** | tRPC | 11.0.0 | End-to-end type safety |
+| **Authentication** | Better Auth | 1.3.9 | Modern, lightweight auth |
+| **Job Queue** | BullMQ | 5.66.4 | Robust Redis-backed queue |
+| **Browser Automation** | Playwright | 1.57.0 | Reliable headless browser control |
+| **Database (OLTP)** | PostgreSQL | - | Transactional data |
+| **Database (OLAP)** | ClickHouse | - | Analytical time-series data |
+| **ORM** | Drizzle ORM | 0.41.0 | Type-safe SQL with migrations |
+| **Styling** | Tailwind CSS | 4.0.15 | Utility-first CSS |
+| **UI Components** | Radix UI | - | Accessible primitives |
+| **Validation** | Zod | 3.24.2 | Runtime type validation |
+| **State Management** | React Query | 5.69.0 | Server state management |
+| **Linting** | Biome | 1.9.4 | Fast linter and formatter |
+
+## Core Technologies
+
+### Node.js 20+
+
+**Version**: 20 or higher (from `package.json:32-34`)
+
+**Why Chosen**:
+- Required for Next.js 15
+- Native fetch API support
+- Performance improvements over Node 18
+- Long-term support (LTS)
+
+**Configuration** (`package.json`):
+```json
+{
+  "engines": {
+    "node": ">=20"
+  }
+}
+```
+
+### TypeScript 5.9.3
+
+**Version**: `5.9.3` (from `package.json:29`)
+
+**Why Chosen**:
+- Type safety across entire codebase
+- Better refactoring and IDE support
+- Catch errors at compile time
+- Shared types between frontend and backend
+
+**Configuration**: Each workspace has its own `tsconfig.json`
+
+**Strict Mode Enabled**:
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true
+  }
+}
+```
+
+### pnpm 10.16.0
+
+**Version**: `10.16.0` (from `package.json:31`)
+
+**Why Chosen**:
+- **3x faster** than npm for monorepo installations
+- **Disk efficient**: Uses content-addressable storage
+- **Strict**: No phantom dependencies
+- **Native workspace support**: Better than npm workspaces
+
+**Alternative Considered**: npm/yarn
+- Rejected due to slower installation and phantom dependency issues
+
+**Configuration** (`pnpm-workspace.yaml`):
+```yaml
+packages:
+  - "apps/*"
+  - "packages/*"
+```
+
+### Turborepo 2.3.3
+
+**Version**: `2.3.3` (from `package.json:28`)
+
+**Why Chosen**:
+- Incremental builds (only rebuilds changed packages)
+- Remote caching support
+- Dependency-aware task execution
+- Parallel task execution
+
+**Pipeline** (`turbo.json`):
+```json
+{
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**"]
+    },
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    }
+  }
+}
+```
+
+**Performance**: Builds only changed packages, saving minutes on large changesets
+
+## Frontend Stack
+
+### Next.js 15.5.5
+
+**Version**: `15.5.5` (from `apps/web/package.json:38`)
+
+**Why Chosen**:
+- **App Router**: Modern file-based routing with layouts
+- **React Server Components**: Reduced client bundle size
+- **Streaming SSR**: Faster initial page loads
+- **Built-in optimizations**: Image optimization, font optimization
+- **API Routes**: Collocated with frontend code
+
+**Features Used**:
+- App Router (`app/` directory)
+- Server Actions (form submissions)
+- Route Groups (`(auth)/` for authenticated routes)
+- Layouts and Templates
+- Loading states
+- Error boundaries
+
+**Configuration** (`apps/web/next.config.js`):
+```javascript
+export default {
+  reactStrictMode: true,
+  experimental: {
+    turbo: true, // Turbopack for faster dev builds
+  },
+};
+```
+
+### React 19.0.0
+
+**Version**: `19.0.0` (from `apps/web/package.json:41`)
+
+**Why Chosen**:
+- Required for Next.js 15
+- Server Components support
+- Improved Suspense handling
+- Better TypeScript support
+
+**Features Used**:
+- Server Components (default in App Router)
+- Client Components (`"use client"`)
+- Suspense boundaries
+- React Query integration
+
+### Tailwind CSS 4.0.15
+
+**Version**: `4.0.15` (from `apps/web/package.json:58`)
+
+**Why Chosen**:
+- Utility-first CSS for rapid development
+- Small bundle size (unused classes purged)
+- Design system consistency
+- Great DX with autocomplete
+
+**Plugins Used**:
+- `@tailwindcss/typography` (0.5.19) - Prose styling
+- `tw-animate-css` (1.3.8) - Animation utilities
+
+**Configuration** (`apps/web/tailwind.config.js`):
+```javascript
+export default {
+  content: [
+    "./src/**/*.{ts,tsx}",
+    "../../packages/ui/src/**/*.{ts,tsx}",
+  ],
+  theme: {
+    extend: {
+      // Custom theme extensions
+    },
+  },
+};
+```
+
+### Radix UI
+
+**Packages Used** (from `packages/ui/package.json:22-32`):
+- `@radix-ui/react-dialog` - Modals and dialogs
+- `@radix-ui/react-dropdown-menu` - Dropdown menus
+- `@radix-ui/react-select` - Custom select inputs
+- `@radix-ui/react-checkbox` - Checkboxes
+- `@radix-ui/react-label` - Form labels
+- `@radix-ui/react-tabs` - Tab navigation
+- `@radix-ui/react-tooltip` - Tooltips
+- `@radix-ui/react-popover` - Popovers
+- `@radix-ui/react-scroll-area` - Custom scrollbars
+- `@radix-ui/react-separator` - Dividers
+
+**Why Chosen**:
+- Unstyled, accessible primitives
+- Full keyboard navigation
+- ARIA attributes included
+- Composable and customizable
+
+**Example Usage**:
+```tsx
+import * as Dialog from "@radix-ui/react-dialog";
+
+export function Modal() {
+  return (
+    <Dialog.Root>
+      <Dialog.Trigger>Open</Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay />
+        <Dialog.Content>
+          <Dialog.Title>Modal Title</Dialog.Title>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+```
+
+### Lucide React 0.544.0
+
+**Version**: `0.544.0` (from `apps/web/package.json:37`)
+
+**Why Chosen**:
+- Large icon library (1000+ icons)
+- Tree-shakeable (only imports used icons)
+- Consistent design
+- TypeScript support
+
+**Usage**:
+```tsx
+import { CheckIcon, XIcon } from "lucide-react";
+```
+
+## API Layer
+
+### tRPC 11.0.0
+
+**Version**: `11.0.0` (from `apps/web/package.json:31-33`)
+
+**Why Chosen**:
+- **End-to-end type safety**: Frontend knows exact API types
+- **No code generation**: Types inferred automatically
+- **Great DX**: Autocomplete and type checking
+- **No schema files**: Types derived from implementation
+
+**Alternative Considered**: REST API with OpenAPI
+- Rejected due to manual type synchronization and code generation overhead
+
+**Architecture**:
+```typescript
+// Server (apps/web/src/server/api/routers/prompt/prompt.ts)
+export const promptRouter = createTRPCRouter({
+  list: protectedProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .query(({ input }) => {
+      // Implementation
+    }),
+});
+
+// Client (apps/web/src/app/(auth)/prompts/page.tsx)
+const { data } = trpc.prompt.list.useQuery({ workspaceId });
+//     ^? { id: string, prompt: string, ... }[]
+```
+
+**Middleware Stack** (`apps/web/src/server/api/trpc.ts:21-37`):
+```typescript
+export const t = initTRPC.context<typeof createTRPCContext>().create({
+  transformer: superjson, // Serialize Date, Map, Set, etc.
+  errorFormatter({ shape, error }) {
+    // Map domain errors to tRPC errors
+  },
+});
+```
+
+**Routers** (`apps/web/src/server/api/root.ts`):
+- `agent` - Job submission and progress
+- `analysis` - Query analysis results
+- `prompt` - Prompt CRUD operations
+- `workspace` - Workspace management
+- `internal` - Cron and internal endpoints
+
+### SuperJSON 2.2.1
+
+**Version**: `2.2.1` (from `apps/web/package.json:45`)
+
+**Why Chosen**:
+- Serializes `Date`, `Map`, `Set`, `BigInt`, `undefined`
+- Required for tRPC to pass complex types
+- Zero configuration with tRPC
+
+## Authentication
+
+### Better Auth 1.3.9
+
+**Version**: `1.3.9` (from `apps/web/package.json:34`)
+
+**Why Chosen**:
+- Modern, lightweight alternative to NextAuth.js
+- Better TypeScript support
+- Framework-agnostic
+- Simpler session management
+- Built-in social providers
+
+**Alternative Considered**: NextAuth.js
+- Better Auth chosen for simpler setup and better DX
+
+**Configuration** (`apps/web/src/lib/auth/auth.ts`):
+```typescript
+import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+
+export const auth = betterAuth({
+  database: drizzleAdapter(db, {
+    provider: "pg",
+  }),
+  socialProviders: {
+    google: {
+      clientId: env.GOOGLE_CLIENT_ID,
+      clientSecret: env.GOOGLE_CLIENT_SECRET,
+    },
+  },
+});
+```
+
+**Session Management**:
+- HTTP-only cookies
+- Session stored in PostgreSQL
+- Middleware checks for protected routes
+
+## State Management
+
+### TanStack Query (React Query) 5.69.0
+
+**Version**: `5.69.0` (from `apps/web/package.json:30`)
+
+**Why Chosen**:
+- Server state management (not local state)
+- Automatic caching and refetching
+- Optimistic updates
+- Integrated with tRPC
+
+**Features Used**:
+- `useQuery` for data fetching
+- `useMutation` for mutations
+- Query invalidation
+- Background refetching
+
+**Example**:
+```tsx
+const { data, isLoading } = trpc.prompt.list.useQuery({ workspaceId });
+
+const { mutate: createPrompt } = trpc.prompt.create.useMutation({
+  onSuccess: () => {
+    // Invalidate and refetch
+    utils.prompt.list.invalidate();
+  },
+});
+```
+
+## Backend Stack
+
+### BullMQ 5.66.4
+
+**Version**: `5.66.4` (from `apps/agent/package.json:18`)
+
+**Why Chosen**:
+- Robust Redis-backed job queue
+- Job retry with exponential backoff
+- Job progress tracking
+- Priority queues
+- Graceful shutdown support
+- Event-based job monitoring
+
+**Alternative Considered**: Agenda, Bee-Queue
+- BullMQ chosen for better Redis support and active maintenance
+
+**Architecture** (`packages/services/src/agent/queue.ts:17-33`):
+```typescript
+const queues = new Map<Provider, Queue>();
+
+export function getQueueName(provider: Provider): string {
+  return `oneglanse-agent-${provider}`;
+}
+
+export function getProviderQueue(provider: Provider): Queue {
+  let q = queues.get(provider);
+  if (!q) {
+    q = new Queue(getQueueName(provider), {
+      connection,
+      defaultJobOptions: DEFAULT_JOB_OPTIONS,
+    });
+    queues.set(provider, q);
+  }
+  return q;
+}
+```
+
+**Worker Configuration** (`apps/agent/src/worker.ts:26-35`):
+```typescript
+workers = PROVIDER_LIST.map((provider) => {
+  const w = new Worker(getQueueName(provider), handleJob, {
+    connection,
+    concurrency: workerConcurrency,
+    lockDuration: 15 * 60 * 1000, // 15 minutes
+    stalledInterval: 60 * 1000,
+    maxStalledCount: 5,
+  });
+  return w;
+});
+```
+
+**Queue Per Provider**:
+- Separate queue for each AI provider (ChatGPT, Claude, etc.)
+- Prevents one provider's failures from blocking others
+- Sequential processing per provider (concurrency: 1)
+
+### Playwright 1.57.0
+
+**Version**: `1.57.0` (from `apps/agent/package.json:20`)
+
+**Why Chosen**:
+- Modern browser automation API
+- Headless execution
+- Built-in waiting and retry
+- Cross-browser support
+- Auto-wait for elements
+
+**Alternative Considered**: Puppeteer, Selenium
+- Playwright chosen for better API and active maintenance
+
+**Usage** (`apps/agent/src/core/createAgent.ts`):
+```typescript
+import { chromium } from "playwright";
+
+const browser = await chromium.launch({
+  headless: true,
+  args: [
+    "--disable-blink-features=AutomationControlled",
+    "--no-sandbox",
+  ],
+});
+
+const context = await browser.newContext({
+  viewport: { width: 1280, height: 720 },
+  userAgent: "...",
+});
+
+const page = await context.newPage();
+```
+
+**Provider-Specific Automation**:
+- `apps/agent/src/core/providers/chatgpt/` - ChatGPT automation
+- `apps/agent/src/core/providers/claude/` - Claude automation
+- `apps/agent/src/core/providers/gemini/` - Gemini automation
+- `apps/agent/src/core/providers/perplexity/` - Perplexity automation
+- `apps/agent/src/core/providers/ai-overview/` - AI Overview scraping
+
+### Redis (via ioredis 5.9.2)
+
+**Version**: `5.9.2` (from `packages/services/package.json:26`)
+
+**Why Chosen**:
+- Used by BullMQ for job queue storage
+- Fast in-memory data store
+- Pub/sub for job events
+- Atomic operations for job progress
+
+**Usage**:
+- Job queue storage (BullMQ)
+- Job progress tracking (`job:{id}:result`)
+- Session storage (optional)
+
+**Connection** (`packages/services/src/agent/redis.ts`):
+```typescript
+import Redis from "ioredis";
+
+export const redis = new Redis({
+  host: env.REDIS_HOST,
+  port: env.REDIS_PORT,
+  password: env.REDIS_PASSWORD,
+});
+```
+
+## Database Stack
+
+### PostgreSQL
+
+**Purpose**: Transactional data (OLTP)
+
+**Why Chosen**:
+- ACID compliance
+- Relational integrity
+- JSON support (for metadata)
+- Strong ecosystem
+
+**Data Stored**:
+- User accounts (Better Auth)
+- Workspaces
+- Prompts
+- Workspace settings
+- Team members
+
+**Connection**: `pg` driver (8.17.2) via Drizzle ORM
+
+### ClickHouse
+
+**Client**: `@clickhouse/client` 1.12.1 (from `packages/db/package.json:24`)
+
+**Purpose**: Analytical data (OLAP)
+
+**Why Chosen**:
+- **Fast analytical queries** on millions of rows
+- **Column-oriented** storage (optimized for aggregations)
+- **Time-series** data (prompt responses over time)
+- **Compression**: 10x better than PostgreSQL for analytics
+
+**Data Stored**:
+- Prompt responses (raw LLM outputs)
+- Analysis results (sentiment, position, visibility)
+- Time-series metrics
+- Source tracking
+
+**Schema Location**: `packages/db/clickhouse-init/`
+
+**Connection** (`packages/db/src/clients/clickhouse.ts:1-5`):
+```typescript
+import { createClient } from "@clickhouse/client";
+
+export const clickhouse = createClient({
+  host: env.CLICKHOUSE_URL,
+  username: env.CLICKHOUSE_USER,
+  password: env.CLICKHOUSE_PASSWORD,
+  database: env.CLICKHOUSE_DB,
+});
+```
+
+### Drizzle ORM 0.41.0
+
+**Version**: `0.41.0` (from `apps/web/package.json:36`)
+
+**Why Chosen**:
+- Type-safe SQL queries
+- Migration system
+- Zero runtime overhead
+- PostgreSQL-first design
+- Better DX than Prisma for this use case
+
+**Alternative Considered**: Prisma
+- Drizzle chosen for lighter runtime and better TypeScript inference
+
+**Schema Definition** (`packages/db/src/schema/workspace.ts`):
+```typescript
+import { pgTable, text, timestamp, jsonb } from "drizzle-orm/pg-core";
+
+export const workspaces = pgTable("workspaces", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  enabledProviders: jsonb("enabled_providers"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+```
+
+**Query Example**:
+```typescript
+import { db } from "@oneglanse/db";
+import { eq } from "drizzle-orm";
+
+const workspace = await db
+  .select()
+  .from(schema.workspaces)
+  .where(eq(schema.workspaces.id, workspaceId))
+  .limit(1);
+```
+
+**Migrations**:
+```bash
+pnpm db:generate    # Generate migration from schema
+pnpm db:migrate     # Apply migrations
+pnpm db:studio      # Visual database browser
+```
+
+## Validation
+
+### Zod 3.24.2
+
+**Version**: `3.24.2` (from `apps/web/package.json:46`)
+
+**Why Chosen**:
+- Runtime type validation
+- TypeScript inference
+- Integrates with tRPC and React Hook Form
+- Composable schemas
+
+**Usage**:
+```typescript
+import { z } from "zod";
+
+// tRPC input validation
+export const createPromptSchema = z.object({
+  workspaceId: z.string().uuid(),
+  prompt: z.string().min(1).max(1000),
+});
+
+// Type inference
+type CreatePromptInput = z.infer<typeof createPromptSchema>;
+```
+
+## Development Tools
+
+### Biome 1.9.4
+
+**Version**: `1.9.4` (from `package.json:26`)
+
+**Why Chosen**:
+- **Fast**: Written in Rust, 100x faster than ESLint
+- **All-in-one**: Linter + formatter (no need for Prettier)
+- **Compatible**: Can replace ESLint + Prettier
+- **Great DX**: Fast feedback in editor
+
+**Alternative Considered**: ESLint + Prettier
+- Biome chosen for speed and simplicity
+
+**Configuration** (`biome.json`):
+```json
+{
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "tab"
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  }
+}
+```
+
+**Scripts**:
+```bash
+pnpm lint           # Check all files
+pnpm lint:fix       # Fix auto-fixable issues
+```
+
+### Knip 5.85.0
+
+**Version**: `5.85.0` (from `package.json:27`)
+
+**Purpose**: Find unused files, dependencies, and exports
+
+**Why Chosen**:
+- Keeps codebase clean
+- Identifies dead code
+- Detects unused dependencies
+
+## External Services
+
+### OpenAI API 5.23.2
+
+**Client**: `openai` 5.23.2 (from `packages/services/package.json:27`)
+
+**Purpose**: LLM-based response analysis
+
+**Model Used**: GPT-4.1 (from `packages/services/src/analysis/runAnalysis.ts:21`)
+
+**Why Chosen**:
+- High-quality structured output (JSON mode)
+- Reliable API
+- Good performance on analysis tasks
+
+**Usage** (`packages/services/src/analysis/runAnalysis.ts:20-36`):
+```typescript
+const response = await chatgpt.responses.create({
+  model: "gpt-4.1",
+  temperature: 0,
+  input: [
+    {
+      role: "system",
+      content: "You are an expert brand intelligence analyst...",
+    },
+    {
+      role: "user",
+      content: prompt,
+    },
+  ],
+  text: {
+    format: { type: "json_object" },
+  },
+});
+```
+
+## Utility Libraries
+
+### React Hook Form 7.62.0
+
+**Version**: `7.62.0` (from `packages/ui/package.json:36`)
+
+**Why Chosen**:
+- Performant form state management
+- Easy validation with Zod
+- Minimal re-renders
+
+**Integration**:
+```typescript
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+const form = useForm({
+  resolver: zodResolver(createPromptSchema),
+});
+```
+
+### Class Variance Authority 0.7.1
+
+**Version**: `0.7.1` (from `packages/ui/package.json:33`)
+
+**Purpose**: Component variant management
+
+**Usage**:
+```typescript
+import { cva } from "class-variance-authority";
+
+const buttonVariants = cva("button-base", {
+  variants: {
+    variant: {
+      primary: "bg-blue-500",
+      secondary: "bg-gray-500",
+    },
+    size: {
+      sm: "px-2 py-1",
+      lg: "px-4 py-2",
+    },
+  },
+});
+```
+
+### Turndown 7.2.2
+
+**Version**: `7.2.2` (from `apps/agent/package.json:21`)
+
+**Purpose**: Convert HTML responses to Markdown
+
+**Usage**: Clean AI provider responses before storage
+
+### Marked 17.0.1
+
+**Version**: `17.0.1` (from `packages/utils/package.json:21`)
+
+**Purpose**: Markdown parsing and rendering
+
+### Sanitize HTML 2.17.1
+
+**Version**: `2.17.1` (from `packages/utils/package.json:22`)
+
+**Purpose**: XSS protection when rendering user content
+
+## Version Summary
+
+### Key Dependencies
+
+```json
+{
+  "dependencies": {
+    "next": "15.5.5",
+    "react": "19.0.0",
+    "typescript": "5.9.3",
+    "@trpc/server": "11.0.0",
+    "@trpc/client": "11.0.0",
+    "@trpc/react-query": "11.0.0",
+    "@tanstack/react-query": "5.69.0",
+    "better-auth": "1.3.9",
+    "drizzle-orm": "0.41.0",
+    "bullmq": "5.66.4",
+    "playwright": "1.57.0",
+    "ioredis": "5.9.2",
+    "openai": "5.23.2",
+    "zod": "3.24.2",
+    "tailwindcss": "4.0.15",
+    "@clickhouse/client": "1.12.1"
+  },
+  "devDependencies": {
+    "turbo": "2.3.3",
+    "@biomejs/biome": "1.9.4",
+    "knip": "5.85.0",
+    "drizzle-kit": "0.30.5"
+  },
+  "packageManager": "pnpm@10.16.0"
+}
+```
+
+## Technology Decisions Summary
+
+### Why This Stack Works
+
+1. **Type Safety End-to-End**
+   - TypeScript + tRPC + Zod = Zero runtime type mismatches
+   - Drizzle ORM = Type-safe database queries
+   - Shared types package = Single source of truth
+
+2. **Performance**
+   - Next.js 15 = Fast server-side rendering
+   - React Query = Automatic caching
+   - ClickHouse = Fast analytical queries
+   - Warm browser pool = Faster job execution
+
+3. **Developer Experience**
+   - Turborepo = Fast incremental builds
+   - tRPC = Autocomplete for API calls
+   - Biome = Fast linting and formatting
+   - Drizzle Studio = Visual database browser
+
+4. **Scalability**
+   - BullMQ = Horizontal worker scaling
+   - ClickHouse = Handles millions of rows
+   - Redis = Fast job queue
+   - Provider isolation = No cascading failures
+
+5. **Reliability**
+   - BullMQ = Job retry and failure handling
+   - Playwright = Robust browser automation
+   - Proxy rotation = Avoid rate limits
+   - Graceful shutdown = Clean worker termination
+
+## Migration Path
+
+If considering technology changes:
+
+- **Next.js → Remix**: Possible but loses tRPC integration
+- **tRPC → REST**: Loses type safety, requires OpenAPI
+- **Drizzle → Prisma**: More features but heavier runtime
+- **BullMQ → Temporal**: Better orchestration but more complex
+- **Playwright → Puppeteer**: Less features and maintenance
+
+## Related Documentation
+
+- [System Architecture](/development/overview) - How these technologies work together
+- [Monorepo Structure](/development/monorepo-structure) - Where each technology is used

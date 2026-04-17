@@ -1,0 +1,368 @@
+---
+title: "Agent Types"
+description: "TypeScript types for agent interactions, citations, and content extraction"
+---
+
+## Overview
+
+The agent types module defines interfaces for handling agent responses, citations, and content blocks. These types are used throughout the OneGlance system to structure AI agent outputs and manage source citations.
+
+## AgentCitation
+
+Represents a citation or reference within agent-generated content.
+
+```typescript
+interface AgentCitation {
+  text: string;
+  href?: string | null;
+  title?: string | null;
+  ariaLabel?: string | null;
+  type?: "link" | "superscript" | "button";
+}
+```
+
+<ResponseField name="text" type="string" required>
+  The citation text to display
+</ResponseField>
+
+<ResponseField name="href" type="string | null">
+  Optional URL the citation links to
+</ResponseField>
+
+<ResponseField name="title" type="string | null">
+  Optional tooltip or title text for the citation
+</ResponseField>
+
+<ResponseField name="ariaLabel" type="string | null">
+  Optional accessibility label for screen readers
+</ResponseField>
+
+<ResponseField name="type" type="'link' | 'superscript' | 'button'">
+  Visual style of the citation. Determines how it's rendered in the UI.
+</ResponseField>
+
+### Usage
+
+Citations are used to link agent responses back to their source material:
+
+```typescript
+const citation: AgentCitation = {
+  text: "[1]",
+  href: "https://example.com/source",
+  title: "Example Source",
+  type: "superscript"
+};
+```
+
+**Used in:**
+- `ContentBlock` - as part of content block citations
+- `ExtractionResult` - as inline citations in extracted content
+
+---
+
+## ContentBlock
+
+Represents a structured block of content with associated metadata and citations.
+
+```typescript
+interface ContentBlock {
+  text: string;
+  tag: string;
+  citations?: AgentCitation[];
+}
+```
+
+<ResponseField name="text" type="string" required>
+  The main text content of the block
+</ResponseField>
+
+<ResponseField name="tag" type="string" required>
+  HTML tag or identifier for the content block (e.g., "p", "h1", "ul")
+</ResponseField>
+
+<ResponseField name="citations" type="AgentCitation[]">
+  Optional array of citations associated with this content block
+</ResponseField>
+
+### Usage
+
+Content blocks structure agent responses into semantic chunks:
+
+```typescript
+const block: ContentBlock = {
+  text: "OneGlance provides AI-powered analytics.",
+  tag: "p",
+  citations: [
+    {
+      text: "[1]",
+      href: "https://oneglance.ai",
+      type: "superscript"
+    }
+  ]
+};
+```
+
+**Used in:**
+- `ExtractionResult` - array of content blocks from extraction
+
+---
+
+## ExtractionResult
+
+Complete result from an agent extraction operation, including the response text, structured content, citations, and sources.
+
+```typescript
+interface ExtractionResult {
+  response: string;
+  contentBlocks: ContentBlock[];
+  inlineCitations: AgentCitation[];
+  sources: Source[];
+  hasSourcesButton: boolean;
+  extractionErrors: string[];
+}
+```
+
+<ResponseField name="response" type="string" required>
+  The raw text response from the agent
+</ResponseField>
+
+<ResponseField name="contentBlocks" type="ContentBlock[]" required>
+  Structured content blocks parsed from the response
+</ResponseField>
+
+<ResponseField name="inlineCitations" type="AgentCitation[]" required>
+  Citations that appear inline within the response text
+</ResponseField>
+
+<ResponseField name="sources" type="Source[]" required>
+  Source documents or URLs referenced in the response. Each source contains a URL, title, and other metadata.
+</ResponseField>
+
+<ResponseField name="hasSourcesButton" type="boolean" required>
+  Whether to display a "Show Sources" button in the UI
+</ResponseField>
+
+<ResponseField name="extractionErrors" type="string[]" required>
+  Array of error messages encountered during extraction
+</ResponseField>
+
+### Usage
+
+This type represents the complete output from agent content extraction:
+
+```typescript
+const result: ExtractionResult = {
+  response: "OneGlance is a leading AI analytics platform...",
+  contentBlocks: [
+    {
+      text: "OneGlance is a leading AI analytics platform",
+      tag: "p",
+      citations: [{ text: "[1]", href: "https://oneglance.ai", type: "superscript" }]
+    }
+  ],
+  inlineCitations: [{ text: "[1]", href: "https://oneglance.ai", type: "superscript" }],
+  sources: [
+    {
+      title: "OneGlance Homepage",
+      cited_text: "AI analytics platform",
+      url: "https://oneglance.ai",
+      domain: "oneglance.ai",
+      favicon: "https://oneglance.ai/favicon.ico"
+    }
+  ],
+  hasSourcesButton: true,
+  extractionErrors: []
+};
+```
+
+**Used in:**
+- Agent response processing pipelines
+- UI components that display agent-generated content
+
+---
+
+## AskPromptResult
+
+Result from executing a prompt against an AI model, including the response and associated metadata.
+
+```typescript
+interface AskPromptResult {
+  userId: string;
+  workspaceId: string;
+  promptId: string;
+  prompt: string;
+  response: string;
+  sources: Source[];
+}
+```
+
+<ResponseField name="userId" type="string" required>
+  Unique identifier of the user who submitted the prompt
+</ResponseField>
+
+<ResponseField name="workspaceId" type="string" required>
+  Unique identifier of the workspace context
+</ResponseField>
+
+<ResponseField name="promptId" type="string" required>
+  Unique identifier for this specific prompt
+</ResponseField>
+
+<ResponseField name="prompt" type="string" required>
+  The original prompt text submitted to the AI model
+</ResponseField>
+
+<ResponseField name="response" type="string" required>
+  The AI model's response text
+</ResponseField>
+
+<ResponseField name="sources" type="Source[]" required>
+  Sources cited in the response
+</ResponseField>
+
+### Usage
+
+```typescript
+const result: AskPromptResult = {
+  userId: "user_123",
+  workspaceId: "ws_456",
+  promptId: "prompt_789",
+  prompt: "What are the best AI analytics platforms?",
+  response: "OneGlance is a leading AI analytics platform...",
+  sources: []
+};
+```
+
+**Used in:**
+- Prompt execution workflows
+- Response storage and retrieval
+
+---
+
+## Provider
+
+Supported AI model providers.
+
+```typescript
+const PROVIDER_LIST = [
+  "chatgpt",
+  "claude",
+  "perplexity",
+  "gemini",
+  "ai-overview",
+] as const;
+
+type Provider = (typeof PROVIDER_LIST)[number];
+```
+
+The `Provider` type is a union of supported AI model provider identifiers:
+- `"chatgpt"` - OpenAI's ChatGPT
+- `"claude"` - Anthropic's Claude
+- `"perplexity"` - Perplexity AI
+- `"gemini"` - Google's Gemini
+- `"ai-overview"` - Google AI Overview
+
+### Usage
+
+```typescript
+const provider: Provider = "claude";
+```
+
+**Used in:**
+- Model selection and filtering
+- Analysis record identification
+- Results aggregation by provider
+
+---
+
+## AgentResult
+
+Result wrapper for agent operations, indicating success or failure.
+
+```typescript
+type AgentResult = {
+  status: "fulfilled" | "rejected";
+  data: AskPromptResult[];
+};
+```
+
+<ResponseField name="status" type="'fulfilled' | 'rejected'" required>
+  Whether the agent operation succeeded or failed
+</ResponseField>
+
+<ResponseField name="data" type="AskPromptResult[]" required>
+  Array of prompt results (may be empty if rejected)
+</ResponseField>
+
+### Usage
+
+```typescript
+const result: AgentResult = {
+  status: "fulfilled",
+  data: [
+    {
+      userId: "user_123",
+      workspaceId: "ws_456",
+      promptId: "prompt_789",
+      prompt: "What are the best AI platforms?",
+      response: "Here are the top platforms...",
+      sources: []
+    }
+  ]
+};
+```
+
+**Used in:**
+- Multi-model prompt execution
+- Error handling in agent workflows
+
+---
+
+## ModelResult
+
+Aggregates results from multiple AI model providers.
+
+```typescript
+type ModelResult = Record<Provider, AgentResult>;
+```
+
+A record mapping each AI provider to its corresponding agent result. This allows tracking results across all providers simultaneously.
+
+### Usage
+
+```typescript
+const modelResults: ModelResult = {
+  chatgpt: {
+    status: "fulfilled",
+    data: [/* ... */]
+  },
+  claude: {
+    status: "fulfilled",
+    data: [/* ... */]
+  },
+  perplexity: {
+    status: "rejected",
+    data: []
+  },
+  gemini: {
+    status: "fulfilled",
+    data: [/* ... */]
+  },
+  "ai-overview": {
+    status: "fulfilled",
+    data: [/* ... */]
+  }
+};
+```
+
+**Used in:**
+- Multi-model analysis workflows
+- Comparing responses across different AI providers
+- Aggregating results for dashboard displays
+
+---
+
+## Related Types
+
+- [Analysis Types](/api/types/analysis) - Analysis records that include agent results
+- [Entity Types](/api/types/entities) - Competitor and brand entities

@@ -1,0 +1,364 @@
+---
+title: Prompts
+description: Create and manage prompts that test how AI providers mention your brand
+---
+
+## What are prompts?
+
+Prompts are questions or queries that OneGlanse automatically submits to AI providers to test how they mention your brand. Each prompt represents a real user question that might trigger a response containing brand mentions.
+
+When you create a prompt, OneGlanse:
+1. Submits it to all enabled providers in your workspace
+2. Waits for complete responses using real browser automation
+3. Extracts the response text and citation sources
+4. Analyzes brand visibility, sentiment, and competitive positioning
+5. Stores results for historical tracking and trend analysis
+
+## Why prompts matter
+
+Prompts are the foundation of your AI brand monitoring strategy. Well-crafted prompts help you:
+
+**Discover brand visibility** - Test if AI providers mention your brand for relevant queries
+
+**Track competitive positioning** - See how you rank against competitors in AI responses
+
+**Monitor sentiment changes** - Detect shifts in how AI describes your brand over time
+
+**Identify content gaps** - Find topics where AI providers lack current information about your brand
+
+**Validate marketing claims** - Check if AI responses reflect your positioning and messaging
+
+## How prompts work
+
+### Prompt structure
+
+Each prompt contains:
+
+```typescript
+interface UserPrompt {
+  id: string;           // Unique identifier
+  user_id: string;      // Creator
+  workspace_id: string; // Associated workspace
+  prompt: string;       // The actual question
+  created_at: string;   // Creation timestamp
+}
+```
+
+### Execution flow
+
+When OneGlanse runs prompts, it follows this process:
+
+<Steps>
+  <Step title="Browser initialization">
+    Launch a real browser session for each AI provider using Playwright automation:
+    
+    ```typescript
+    // Provider-specific configuration
+    const config = {
+      url: "https://chatgpt.com/",
+      warmupDelayMs: 5000,
+      requiresWarmup: true
+    };
+    ```
+  </Step>
+  
+  <Step title="Prompt submission">
+    Type and submit the prompt through the provider's interface:
+    
+    ```typescript
+    async function executePrompt(
+      page: Page,
+      prompt: string,
+      provider: Provider
+    ): Promise<{ response: string; sources: Source[] }> {
+      await askPrompt(page, prompt, provider);
+      // Wait for response to complete
+      const response = await fetchPromptResponses(page, provider);
+      const sources = await checkAndExtractSources(page, provider);
+      return { response, sources };
+    }
+    ```
+  </Step>
+  
+  <Step title="Response extraction">
+    Wait for the AI to finish generating its response, then extract the complete text:
+    
+    ```typescript
+    // Wait for streaming to complete
+    await waitForResponse(page);
+    
+    // Extract markdown-formatted response
+    const response = await extractResponse(page);
+    ```
+  </Step>
+  
+  <Step title="Source collection">
+    Extract citation sources if the provider includes them:
+    
+    ```typescript
+    interface Source {
+      title: string;      // Source article title
+      cited_text: string; // Excerpt from the source
+      url: string;        // Full URL
+      domain: string;     // Domain (e.g., "example.com")
+      favicon?: string;   // Favicon URL
+    }
+    ```
+  </Step>
+  
+  <Step title="Analysis">
+    Analyze the response for brand mentions, sentiment, and competitive positioning. See [Analysis](/concepts/analysis) for details.
+  </Step>
+</Steps>
+
+### Prompt payload
+
+When prompts are scheduled to run, they're bundled into a payload:
+
+```typescript
+interface PromptPayload {
+  user_id: string;
+  workspace_id: string;
+  prompts: {
+    id: string;
+    prompt: string;
+  }[];
+  created_at: string;
+}
+```
+
+This allows efficient batch processing across multiple prompts and providers.
+
+## Crafting effective prompts
+
+### Prompt categories
+
+Different prompt types reveal different insights:
+
+<AccordionGroup>
+  <Accordion title="Direct brand queries">
+    Test if AI providers recognize your brand by name:
+    
+    ```text Examples
+    "What is [Your Brand]?"
+    "Tell me about [Your Brand]"
+    "How does [Your Brand] work?"
+    ```
+    
+    **Insight**: Measures basic brand awareness and accuracy of AI knowledge
+  </Accordion>
+  
+  <Accordion title="Use case queries">
+    Test if your brand appears for relevant problem-solving questions:
+    
+    ```text Examples
+    "What are the best tools for [your category]?"
+    "How can I [solve specific problem]?"
+    "What should I use for [use case]?"
+    ```
+    
+    **Insight**: Reveals competitive positioning and market perception
+  </Accordion>
+  
+  <Accordion title="Comparison queries">
+    See how you're positioned against competitors:
+    
+    ```text Examples
+    "[Your Brand] vs [Competitor]"
+    "Compare [Your Brand] and [Competitor]"
+    "Which is better: [Your Brand] or [Competitor]?"
+    ```
+    
+    **Insight**: Shows head-to-head competitive narratives
+  </Accordion>
+  
+  <Accordion title="Feature-specific queries">
+    Test if AI providers know about your key features:
+    
+    ```text Examples
+    "Tools with [specific feature]"
+    "Best [category] for [feature]"
+    "Does [Your Brand] support [feature]?"
+    ```
+    
+    **Insight**: Identifies knowledge gaps about product capabilities
+  </Accordion>
+</AccordionGroup>
+
+### Prompt best practices
+
+<CardGroup cols={2}>
+  <Card title="Mirror real user language" icon="comment">
+    Write prompts as real users would ask questions, not marketing copy. Use natural language and common search patterns.
+  </Card>
+  
+  <Card title="Test multiple angles" icon="angles-right">
+    Create prompts for different stages of the buyer journey: awareness, consideration, and decision-making.
+  </Card>
+  
+  <Card title="Include competitors" icon="ranking-star">
+    Explicitly mention competitors in some prompts to understand comparative positioning.
+  </Card>
+  
+  <Card title="Vary specificity" icon="sliders">
+    Balance broad category queries with specific feature or use case questions.
+  </Card>
+</CardGroup>
+
+## Prompt response data
+
+Each prompt execution generates a response record:
+
+```typescript
+interface PromptResponse {
+  // Identifiers
+  id: string;
+  prompt_id: string;
+  prompt: string;
+  
+  // Context
+  user_id: string;
+  workspace_id: string;
+  model_provider: string;
+  
+  // Response data
+  response: string;        // Full AI response text
+  sources: Source[];       // Citation sources
+  
+  // Analysis
+  is_analysed: boolean;    // Whether brand analysis completed
+  
+  // Timing
+  prompt_run_at: string;   // When the prompt was executed
+  created_at: string;      // When the response was stored
+}
+```
+
+### Understanding prompt runs
+
+Each time your scheduled job executes, it creates a new **prompt run**. The same prompt can have multiple runs over time:
+
+```typescript
+// Prompt runs are organized by timestamp
+type PromptRunMap<T> = Record<
+  string,              // prompt_id
+  Record<
+    string,            // prompt_run_at timestamp
+    T[]                // responses from different models
+  >
+>;
+```
+
+This structure enables tracking how responses change over time:
+
+```typescript
+{
+  "prompt_abc123": {
+    "2026-03-01T09:00:00Z": [
+      { model: "chatgpt", response: "...", ... },
+      { model: "perplexity", response: "...", ... }
+    ],
+    "2026-03-01T15:00:00Z": [
+      { model: "chatgpt", response: "...", ... },
+      { model: "perplexity", response: "...", ... }
+    ]
+  }
+}
+```
+
+## Response validation
+
+OneGlanse validates responses before storing them to ensure quality:
+
+```typescript
+// Responses must meet these criteria
+if (!response || response.trim().length === 0) {
+  throw new ExternalServiceError(
+    provider,
+    "Empty response extracted"
+  );
+}
+
+const validation = validateResponse(response, provider);
+if (!validation.valid) {
+  throw new ValidationError(
+    `Invalid response: ${validation.reason}`
+  );
+}
+```
+
+Invalid responses trigger automatic retries with the provider's retry policy.
+
+## Monitoring prompt performance
+
+### Success metrics
+
+Track these indicators to evaluate prompt effectiveness:
+
+- **Mention rate** - Percentage of responses that mention your brand
+- **Visibility score** - How prominently your brand appears (0-100)
+- **Sentiment trend** - Changes in positive/negative mentions over time
+- **Position ranking** - Where you rank in recommendation lists
+- **Source diversity** - Variety of sources AI providers cite about your brand
+
+### Example analysis
+
+For the prompt "What are the best project management tools?", you might see:
+
+<CodeGroup>
+```json ChatGPT Response
+{
+  "model_provider": "chatgpt",
+  "response": "Here are some popular project management tools:\n\n1. **Asana** - Great for team collaboration...\n2. **Monday.com** - Visual workflow management...\n3. **Jira** - Best for software development teams...",
+  "sources": [
+    {
+      "title": "Best Project Management Software 2026",
+      "domain": "techcrunch.com",
+      "url": "https://techcrunch.com/..."
+    }
+  ]
+}
+```
+
+```json Perplexity Response
+{
+  "model_provider": "perplexity",
+  "response": "The top project management tools in 2026 include:\n\n**Asana**[1] - Comprehensive task management...\n**Trello**[2] - Kanban-based organization...",
+  "sources": [
+    {
+      "title": "Asana Features Guide",
+      "domain": "asana.com",
+      "url": "https://asana.com/guide"
+    },
+    {
+      "title": "Trello vs Monday.com Comparison",
+      "domain": "g2.com",
+      "url": "https://g2.com/compare/..."
+    }
+  ]
+}
+```
+</CodeGroup>
+
+From these responses, you can analyze:
+- Whether your brand appears in the list
+- Your ranking position (1st, 2nd, 3rd, etc.)
+- How you're described compared to competitors
+- Which sources AI providers cite about your brand
+
+## Related resources
+
+<CardGroup cols={2}>
+  <Card title="Managing Prompts" icon="list-check" href="/guides/managing-prompts">
+    Step-by-step guide to creating and organizing prompts
+  </Card>
+  <Card title="Providers" icon="brain" href="/concepts/providers">
+    Learn how prompts are executed across different AI platforms
+  </Card>
+  <Card title="Analysis" icon="chart-line" href="/concepts/analysis">
+    Understand how prompt responses are analyzed for brand metrics
+  </Card>
+  <Card title="Interpreting Metrics" icon="gauge" href="/guides/interpreting-metrics">
+    Make sense of visibility, sentiment, and position data
+  </Card>
+</CardGroup>

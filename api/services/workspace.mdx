@@ -1,0 +1,702 @@
+---
+title: Workspace Service
+description: Manage workspaces, members, and organization settings
+---
+
+The Workspace service provides functions for creating, querying, and managing workspaces within OneGlance. It handles workspace creation, member management, settings updates, and account deletion.
+
+## Core Functions
+
+### Workspace Creation
+
+#### createWorkspaceForTenant
+
+Creates a new workspace within an organization and automatically adds the creator as an owner.
+
+```typescript
+import { createWorkspaceForTenant } from "@oneglanse/services";
+
+const workspace = await createWorkspaceForTenant({
+  name: "Marketing Team",
+  slug: "marketing-team",
+  domain: "example.com",
+  tenantId: "org_abc123",
+  userId: "user_xyz789"
+});
+```
+
+<ParamField path="args" type="CreateWorkspaceForTenantArgs" required>
+  Configuration object for workspace creation
+  
+  <Expandable title="properties">
+    <ParamField path="name" type="string" required>
+      Display name for the workspace
+    </ParamField>
+    <ParamField path="slug" type="string" required>
+      URL-friendly identifier for the workspace
+    </ParamField>
+    <ParamField path="domain" type="string" required>
+      Primary domain associated with the workspace (e.g., "example.com")
+    </ParamField>
+    <ParamField path="tenantId" type="string" required>
+      Organization ID that owns this workspace
+    </ParamField>
+    <ParamField path="userId" type="string" required>
+      User ID of the workspace creator (will be added as owner)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="workspace" type="Workspace">
+  The created workspace object containing:
+  - `id`: Unique workspace identifier (format: `workspace_*`)
+  - `name`: Workspace display name
+  - `slug`: URL-friendly slug
+  - `domain`: Associated domain
+  - `tenantId`: Parent organization ID
+  - `schedule`: Cron schedule (null initially)
+  - `enabledProviders`: JSON array of enabled AI providers
+  - `createdAt`: Timestamp of creation
+  - `deletedAt`: Soft deletion timestamp (null for active workspaces)
+</ResponseField>
+
+---
+
+#### addWorkspaceToExistingOrg
+
+Adds a new workspace to an existing organization. Verifies user membership before creating the workspace.
+
+```typescript
+import { addWorkspaceToExistingOrg } from "@oneglanse/services";
+
+const { workspace } = await addWorkspaceToExistingOrg({
+  name: "Sales Team",
+  slug: "sales-team",
+  domain: "example.com",
+  userId: "user_xyz789",
+  tenantId: "org_abc123"
+});
+```
+
+<ParamField path="args" type="object" required>
+  <Expandable title="properties">
+    <ParamField path="name" type="string" required>
+      Workspace display name
+    </ParamField>
+    <ParamField path="slug" type="string" required>
+      Workspace slug
+    </ParamField>
+    <ParamField path="domain" type="string" required>
+      Associated domain
+    </ParamField>
+    <ParamField path="userId" type="string" required>
+      User creating the workspace (must be org member)
+    </ParamField>
+    <ParamField path="tenantId" type="string" required>
+      Target organization ID
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="workspace" type="Workspace">
+  The newly created workspace object
+</ResponseField>
+
+**Throws:**
+- `ValidationError` if user is not a member of the organization
+
+---
+
+#### checkIsFirstWorkspace
+
+Checks if this is the user's first workspace (used for onboarding flows).
+
+```typescript
+import { checkIsFirstWorkspace } from "@oneglanse/services";
+
+const isFirst = await checkIsFirstWorkspace({ 
+  userId: "user_xyz789" 
+});
+
+if (isFirst) {
+  // Show onboarding tour
+}
+```
+
+<ParamField path="args.userId" type="string" required>
+  User ID to check
+</ParamField>
+
+<ResponseField name="isFirst" type="boolean">
+  `true` if the user has no active workspace memberships, `false` otherwise
+</ResponseField>
+
+---
+
+### Workspace Queries
+
+#### getWorkspaceById
+
+Retrieves a workspace by its ID. Only returns active (non-deleted) workspaces.
+
+```typescript
+import { getWorkspaceById } from "@oneglanse/services";
+
+const workspace = await getWorkspaceById({
+  workspaceId: "workspace_abc123"
+});
+
+console.log(workspace.name); // "Marketing Team"
+console.log(workspace.domain); // "example.com"
+```
+
+<ParamField path="args.workspaceId" type="string" required>
+  Workspace ID to retrieve
+</ParamField>
+
+<ResponseField name="workspace" type="Workspace">
+  Complete workspace object with all fields
+</ResponseField>
+
+**Throws:**
+- `ValidationError` if workspaceId is empty or undefined
+- `NotFoundError` if workspace doesn't exist or is deleted
+
+---
+
+#### getWorkspacesForUser
+
+Fetches all workspaces within a specific organization that the user is a member of.
+
+```typescript
+import { getWorkspacesForUser } from "@oneglanse/services";
+
+const workspaces = await getWorkspacesForUser({
+  tenantId: "org_abc123",
+  userId: "user_xyz789"
+});
+
+workspaces.forEach(ws => {
+  console.log(`${ws.name} - ${ws.domain}`);
+});
+```
+
+<ParamField path="args" type="GetWorkspacesForUserArgs" required>
+  <Expandable title="properties">
+    <ParamField path="tenantId" type="string" required>
+      Organization ID to filter by
+    </ParamField>
+    <ParamField path="userId" type="string" required>
+      User ID to check membership
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="workspaces" type="Workspace[]">
+  Array of workspaces where the user is an active member
+</ResponseField>
+
+---
+
+#### getAllWorkspacesForUser
+
+Retrieves all workspaces across all organizations for a user, grouped by organization.
+
+```typescript
+import { getAllWorkspacesForUser } from "@oneglanse/services";
+
+const orgGroups = await getAllWorkspacesForUser({
+  userId: "user_xyz789"
+});
+
+orgGroups.forEach(group => {
+  console.log(`Organization: ${group.organization.name}`);
+  group.workspaces.forEach(ws => {
+    console.log(`  - ${ws.name}`);
+  });
+});
+```
+
+<ParamField path="args.userId" type="string" required>
+  User ID
+</ParamField>
+
+<ResponseField name="groups" type="OrganizationWorkspaceGroup[]">
+  Array of objects, each containing:
+  - `organization`: Organization metadata (id, name, slug)
+  - `workspaces`: Array of workspaces in that organization
+</ResponseField>
+
+---
+
+#### getWorkspaceMembersWithUsers
+
+Fetches all members of a workspace with their user details.
+
+```typescript
+import { getWorkspaceMembersWithUsers } from "@oneglanse/services";
+
+const members = await getWorkspaceMembersWithUsers({
+  workspaceId: "workspace_abc123"
+});
+
+members.forEach(member => {
+  console.log(`${member.userName} (${member.role})`);
+});
+```
+
+<ParamField path="args.workspaceId" type="string" required>
+  Workspace ID
+</ParamField>
+
+<ResponseField name="members" type="WorkspaceMemberWithUser[]">
+  Array of member objects with:
+  - `memberId`: Workspace member record ID
+  - `userId`: User ID
+  - `role`: "owner" or "member"
+  - `joinedAt`: Membership creation timestamp
+  - `userName`: User's display name
+  - `userEmail`: User's email address
+  - `userImage`: User's profile image URL
+</ResponseField>
+
+---
+
+#### getWorkspaceJoinInfo
+
+Generates join codes and metadata for inviting users to a workspace.
+
+```typescript
+import { getWorkspaceJoinInfo } from "@oneglanse/services";
+
+const joinInfo = await getWorkspaceJoinInfo({
+  workspaceId: "workspace_abc123"
+});
+
+console.log(`Org code: ${joinInfo.orgCode}`);
+console.log(`Workspace code: ${joinInfo.workspaceCode}`);
+```
+
+<ParamField path="args.workspaceId" type="string" required>
+  Workspace ID
+</ParamField>
+
+<ResponseField name="joinInfo" type="WorkspaceJoinInfo">
+  Contains:
+  - `orgCode`: Organization slug or ID for joining
+  - `workspaceCode`: Workspace ID (globally unique)
+  - `organization`: Organization metadata
+  - `workspace`: Workspace metadata
+</ResponseField>
+
+---
+
+### Member Management
+
+#### addMemberToWorkspace
+
+Adds a user to a workspace with a specified role.
+
+```typescript
+import { addMemberToWorkspace } from "@oneglanse/services";
+
+const result = await addMemberToWorkspace({
+  workspaceId: "workspace_abc123",
+  userId: "user_xyz789",
+  role: "member" // or "owner"
+});
+```
+
+<ParamField path="args" type="AddMemberToWorkspaceArgs" required>
+  <Expandable title="properties">
+    <ParamField path="workspaceId" type="string" required>
+      Target workspace ID
+    </ParamField>
+    <ParamField path="userId" type="string" required>
+      User to add
+    </ParamField>
+    <ParamField path="role" type="'owner' | 'member'" default="member">
+      Member role
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="result" type="AddMemberToWorkspaceResult">
+  Contains workspaceId, userId, and assigned role
+</ResponseField>
+
+**Throws:**
+- `ValidationError` if user is already a member
+
+---
+
+#### removeMemberFromWorkspace
+
+Removes a member from a workspace (soft delete). Prevents removing the last owner.
+
+```typescript
+import { removeMemberFromWorkspace } from "@oneglanse/services";
+
+await removeMemberFromWorkspace({
+  workspaceId: "workspace_abc123",
+  userId: "user_xyz789"
+});
+```
+
+<ParamField path="args" type="RemoveMemberFromWorkspaceArgs" required>
+  <Expandable title="properties">
+    <ParamField path="workspaceId" type="string" required>
+      Workspace ID
+    </ParamField>
+    <ParamField path="userId" type="string" required>
+      User to remove
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Throws:**
+- `NotFoundError` if member not found
+- `ValidationError` if attempting to remove the last owner
+
+---
+
+#### addMemberToWorkspaceByEmail
+
+Adds a user to a workspace by their email address. Creates organization membership if needed.
+
+```typescript
+import { addMemberToWorkspaceByEmail } from "@oneglanse/services";
+
+const result = await addMemberToWorkspaceByEmail({
+  workspaceId: "workspace_abc123",
+  email: "user@example.com",
+  role: "member"
+});
+
+if (result.status === "added") {
+  console.log("User added successfully");
+} else if (result.status === "not-found") {
+  console.log("User doesn't exist - send invite");
+}
+```
+
+<ParamField path="args" type="object" required>
+  <Expandable title="properties">
+    <ParamField path="workspaceId" type="string" required>
+      Target workspace
+    </ParamField>
+    <ParamField path="email" type="string" required>
+      User's email address
+    </ParamField>
+    <ParamField path="role" type="'owner' | 'member'" default="member">
+      Role to assign
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="result" type="object">
+  Union type with one of:
+  - `{ status: "added", workspaceId, userId, role }` - User was added
+  - `{ status: "already-member", workspaceId, userId }` - Already a member
+  - `{ status: "not-found" }` - User account doesn't exist
+</ResponseField>
+
+---
+
+#### joinWorkspaceByCode
+
+Join a workspace using an invite code. Supports organization codes, workspace codes, or combined codes.
+
+```typescript
+import { joinWorkspaceByCode } from "@oneglanse/services";
+
+const result = await joinWorkspaceByCode({
+  code: "workspace_abc123", // or org slug, or "org/workspace" format
+  userId: "user_xyz789"
+});
+
+if (result.status === "joined") {
+  console.log(`Joined ${result.workspace.name}`);
+} else if (result.status === "select-workspace") {
+  // Show workspace selection UI
+  console.log(`Select from ${result.workspaces.length} workspaces`);
+}
+```
+
+<ParamField path="args" type="object" required>
+  <Expandable title="properties">
+    <ParamField path="code" type="string" required>
+      Invite code (workspace ID, org slug, or combined format)
+    </ParamField>
+    <ParamField path="userId" type="string" required>
+      User joining the workspace
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="result" type="object">
+  Union type:
+  - `{ status: "joined", organization, workspace }` - Successfully joined
+  - `{ status: "select-workspace", organization, workspaces[] }` - Multiple workspaces available
+</ResponseField>
+
+**Code Format Support:**
+- Direct workspace ID: `workspace_abc123`
+- Organization slug: `acme-corp` (prompts workspace selection if multiple exist)
+- Combined format: `acme-corp/marketing-team`
+
+---
+
+### Workspace Settings
+
+#### updateWorkspaceDetails
+
+Updates workspace name and domain. Automatically resets analysis if branding changes.
+
+```typescript
+import { updateWorkspaceDetails } from "@oneglanse/services";
+
+const { workspace, analysisReset } = await updateWorkspaceDetails({
+  workspaceId: "workspace_abc123",
+  name: "Marketing & Sales Team",
+  domain: "newdomain.com"
+});
+
+if (analysisReset) {
+  console.log("Analysis data reset due to brand change");
+}
+```
+
+<ParamField path="args" type="object" required>
+  <Expandable title="properties">
+    <ParamField path="workspaceId" type="string" required>
+      Workspace to update
+    </ParamField>
+    <ParamField path="name" type="string" required>
+      New workspace name
+    </ParamField>
+    <ParamField path="domain" type="string" required>
+      New domain
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="result" type="object">
+  - `workspace`: Updated workspace object
+  - `analysisReset`: boolean indicating if analysis was cleared
+</ResponseField>
+
+---
+
+#### updateOrganizationName
+
+Updates the organization name and generates a new slug scoped to the workspace.
+
+```typescript
+import { updateOrganizationName } from "@oneglanse/services";
+
+const org = await updateOrganizationName({
+  workspaceId: "workspace_abc123",
+  organizationName: "Acme Corporation"
+});
+```
+
+<ParamField path="args" type="object" required>
+  <Expandable title="properties">
+    <ParamField path="workspaceId" type="string" required>
+      Workspace ID (used to identify organization)
+    </ParamField>
+    <ParamField path="organizationName" type="string" required>
+      New organization name
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="organization" type="Organization">
+  Updated organization object with new name and slug
+</ResponseField>
+
+---
+
+#### setWorkspaceEnabledProviders
+
+Configures which AI providers are enabled for prompt execution.
+
+```typescript
+import { setWorkspaceEnabledProviders } from "@oneglanse/services";
+import type { Provider } from "@oneglanse/types";
+
+const { providers } = await setWorkspaceEnabledProviders({
+  workspaceId: "workspace_abc123",
+  providers: ["perplexity", "chatgpt", "gemini"]
+});
+```
+
+<ParamField path="args" type="object" required>
+  <Expandable title="properties">
+    <ParamField path="workspaceId" type="string" required>
+      Target workspace
+    </ParamField>
+    <ParamField path="providers" type="Provider[]" required>
+      Array of provider identifiers to enable
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="providers" type="Provider[]">
+  The updated array of enabled providers
+</ResponseField>
+
+---
+
+#### updateWorkspaceSchedule
+
+Sets or clears the cron schedule for automatic prompt execution.
+
+```typescript
+import { updateWorkspaceSchedule } from "@oneglanse/services";
+
+// Set daily schedule at 9 AM
+const { schedule } = await updateWorkspaceSchedule({
+  workspaceId: "workspace_abc123",
+  userId: "user_xyz789",
+  schedule: "0 9 * * *" // cron expression
+});
+
+// Clear schedule
+await updateWorkspaceSchedule({
+  workspaceId: "workspace_abc123",
+  userId: "user_xyz789",
+  schedule: null
+});
+```
+
+<ParamField path="args" type="object" required>
+  <Expandable title="properties">
+    <ParamField path="workspaceId" type="string" required>
+      Workspace to schedule
+    </ParamField>
+    <ParamField path="userId" type="string" required>
+      User ID for job execution context
+    </ParamField>
+    <ParamField path="schedule" type="string | null" required>
+      Cron expression or null to disable
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="schedule" type="string | null">
+  The updated schedule value
+</ResponseField>
+
+**Note:** Uses PostgreSQL `pg_cron` extension. Failures to configure cron are non-fatal and logged as warnings.
+
+---
+
+### Account Management
+
+#### deleteUserAccount
+
+Permanently deletes a user account and cleans up associated workspaces and organizations.
+
+```typescript
+import { deleteUserAccount } from "@oneglanse/services";
+
+await deleteUserAccount({
+  userId: "user_xyz789"
+});
+```
+
+<ParamField path="args.userId" type="string" required>
+  User ID to delete
+</ParamField>
+
+**Behavior:**
+- If user is the sole owner of an organization:
+  - Soft-deletes all workspaces in that org
+  - Soft-deletes all workspace members
+  - Deletes the organization (cascades member and invitation rows)
+- If user is one of multiple owners:
+  - Only removes the user's membership
+  - Leaves organization and workspaces intact
+- Soft-deletes remaining workspace memberships
+- Deletes user account (cascades sessions and auth records)
+
+---
+
+## Usage in tRPC Routers
+
+Example from `apps/web/src/server/api/routers/workspace/_routes/protectedRoutes.ts`:
+
+```typescript
+import { 
+  createWorkspaceForTenant,
+  checkIsFirstWorkspace,
+  getAllWorkspacesForUser 
+} from "@oneglanse/services";
+import { protectedProcedure } from "../../../procedures";
+
+export const protectedWorkspaceRoutes = {
+  create: protectedProcedure
+    .input(createWorkspaceInputSchema)
+    .mutation(async ({ input, ctx }) => {
+      const { user: { id: userId } } = ctx;
+      const { organizationName, name, slug, domain } = input;
+
+      const isFirstWorkspace = await checkIsFirstWorkspace({ userId });
+      
+      // Create organization via auth API
+      const org = await auth.api.createOrganization({
+        body: { name: organizationName || name, slug },
+        headers: ctx.headers,
+      });
+
+      // Create workspace
+      const workspace = await createWorkspaceForTenant({
+        name, slug, domain,
+        tenantId: org.id,
+        userId,
+      });
+
+      return { workspace, org, isFirstWorkspace };
+    }),
+
+  listAllForUser: protectedProcedure.query(async ({ ctx }) => {
+    return getAllWorkspacesForUser({ userId: ctx.user.id });
+  }),
+};
+```
+
+---
+
+## Type Definitions
+
+All types are exported from `@oneglanse/types`:
+
+```typescript
+import type {
+  Workspace,
+  CreateWorkspaceForTenantArgs,
+  GetWorkspaceByIdArgs,
+  GetWorkspacesForUserArgs,
+  GetWorkspaceMembersWithUsersArgs,
+  WorkspaceMemberWithUser,
+  AddMemberToWorkspaceArgs,
+  RemoveMemberFromWorkspaceArgs,
+  WorkspaceJoinInfo,
+  Provider,
+} from "@oneglanse/types";
+```
+
+---
+
+## Source Files
+
+Workspace service functions are implemented in:
+- `packages/services/src/workspace/create.ts` - Workspace creation functions
+- `packages/services/src/workspace/query.ts` - Query and retrieval functions
+- `packages/services/src/workspace/members.ts` - Member management functions
+- `packages/services/src/workspace/settings.ts` - Settings and configuration
+- `packages/services/src/workspace/account.ts` - Account deletion logic
+
+All exports are re-exported through `packages/services/src/workspace/index.ts`.

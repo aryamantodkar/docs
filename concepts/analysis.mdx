@@ -1,0 +1,567 @@
+---
+title: Analysis
+description: Track sentiment, visibility, position, and competitive metrics for your brand across AI providers
+---
+
+## What is analysis?
+
+Analysis is the process of evaluating AI provider responses to extract actionable brand intelligence. OneGlanse analyzes each response to measure:
+
+- **Presence** - Is your brand mentioned? How prominently?
+- **Position** - Where do you rank in recommendation lists?
+- **Sentiment** - How favorably is your brand portrayed?
+- **Recommendation** - Does the AI actively suggest your brand?
+- **Competition** - Who else appears and how do you compare?
+- **Perception** - What narrative is the AI building about your brand?
+- **Risks** - Are there factual errors or negative associations?
+
+This multi-dimensional analysis transforms raw AI responses into strategic insights.
+
+## Why analysis matters
+
+AI responses shape user perceptions and purchasing decisions. Analysis helps you:
+
+**Measure AI visibility** - Quantify how often and how prominently AI mentions your brand
+
+**Track competitive positioning** - Understand where you rank against alternatives
+
+**Detect sentiment shifts** - Catch changes in how AI describes your brand before they impact business
+
+**Identify content gaps** - Find areas where AI lacks current information about your brand
+
+**Guide content strategy** - Prioritize creating content that improves AI understanding
+
+**Validate messaging** - Check if AI responses reflect your brand positioning
+
+## How analysis works
+
+### Analysis structure
+
+Each prompt response generates a comprehensive `BrandAnalysisResult`:
+
+```typescript
+interface BrandAnalysisResult {
+  // High-level metadata
+  metadata?: {
+    brandName: string;
+    brandDomain: string;
+    prompt: string | null;
+    prompt_id: string | null;
+    analyzedAt: string;
+  };
+  
+  // Composite score (0-100)
+  geoScore: {
+    overall: number;
+    verdict: string;
+  };
+  
+  // Six core analysis dimensions
+  presence: PresenceMetrics;
+  position: PositionMetrics;
+  sentiment: SentimentMetrics;
+  recommendation: RecommendationMetrics;
+  competitors: CompetitorMetrics[];
+  perception: PerceptionMetrics;
+  
+  // Actionable insights
+  risks: RiskMetrics;
+  actions: ActionItem[];
+}
+```
+
+### Analysis dimensions
+
+<AccordionGroup>
+  <Accordion title="GEO Score - The headline metric">
+    The **GEO Score** (Generative Engine Optimization Score) is a composite 0-100 score that answers: "How well is your brand performing in AI responses?"
+    
+    ```typescript
+    geoScore: {
+      overall: 75,  // 0-100 composite score
+      verdict: "Strong visibility with room for improvement in competitive positioning"
+    }
+    ```
+    
+    Higher scores indicate better overall performance across all dimensions.
+  </Accordion>
+  
+  <Accordion title="Presence - Is your brand there?">
+    Measures whether and how prominently your brand appears:
+    
+    ```typescript
+    presence: {
+      mentioned: true,           // Brand appears in response
+      mentionCount: 3,           // Number of times mentioned
+      visibility: 85,            // 0-100 prominence score
+      prominence: "significant", // Classification level
+      firstMentionPosition: "top" // Where brand first appears
+    }
+    ```
+    
+    **Prominence levels**:
+    - `dominant` - Primary focus of the response
+    - `significant` - Major part of the discussion
+    - `moderate` - Notable but not central
+    - `minor` - Brief mention
+    - `passing` - Barely referenced
+    - `absent` - Not mentioned
+    
+    **Position values**:
+    - `top` - First third of response
+    - `middle` - Second third
+    - `bottom` - Final third
+    - `absent` - Not mentioned
+  </Accordion>
+  
+  <Accordion title="Position - Where do you rank?">
+    Tracks your ranking in recommendation or comparison lists:
+    
+    ```typescript
+    position: {
+      rankPosition: 2,           // Position in list (null if unranked)
+      totalRanked: 5,            // Total items in list
+      isTopPick: false,          // Marked as #1 recommendation
+      isTopThree: true,          // In top 3 recommendations
+      rankingContext: "Best project management tools for remote teams"
+    }
+    ```
+    
+    This reveals competitive standing when AI lists multiple options.
+  </Accordion>
+  
+  <Accordion title="Sentiment - How favorable is the portrayal?">
+    Analyzes the tone and favorability of brand mentions:
+    
+    ```typescript
+    sentiment: {
+      score: 72,                 // 0-100 (negative to positive)
+      label: "positive",         // Classification
+      positives: [
+        "Excellent collaboration features",
+        "Intuitive user interface",
+        "Strong mobile app"
+      ],
+      negatives: [
+        "Higher pricing than competitors",
+        "Steeper learning curve for advanced features"
+      ]
+    }
+    ```
+    
+    **Sentiment labels**:
+    - `very_positive` (80-100) - Highly favorable
+    - `positive` (60-79) - Generally favorable
+    - `neutral` (40-59) - Balanced or factual
+    - `negative` (20-39) - Unfavorable elements
+    - `very_negative` (0-19) - Significantly negative
+  </Accordion>
+  
+  <Accordion title="Recommendation - Is the AI pushing your brand?">
+    Evaluates how strongly the AI recommends your brand:
+    
+    ```typescript
+    recommendation: {
+      type: "strong_alternative",  // Recommendation strength
+      bestFor: [
+        "Teams needing visual project tracking",
+        "Organizations using agile methodologies"
+      ],
+      caveats: [
+        "May be expensive for small teams",
+        "Requires time investment to learn advanced features"
+      ]
+    }
+    ```
+    
+    **Recommendation types**:
+    - `top_pick` - Primary recommendation
+    - `strong_alternative` - Highly recommended option
+    - `conditional` - Recommended for specific use cases
+    - `mentioned_only` - Listed but not actively recommended
+    - `discouraged` - Mentioned with warnings
+    - `not_mentioned` - Absent from response
+  </Accordion>
+  
+  <Accordion title="Competitors - Who else appears?">
+    Identifies competing brands in the response:
+    
+    ```typescript
+    competitors: [
+      {
+        name: "Asana",
+        domain: "asana.com",
+        visibility: 90,          // Prominence score
+        sentiment: 85,           // Favorability score
+        rankPosition: 1,         // List position
+        isRecommended: true,     // Actively recommended
+        winsOver: ["Trello", "Basecamp"],
+        losesTo: []
+      },
+      {
+        name: "Monday.com",
+        domain: "monday.com",
+        visibility: 75,
+        sentiment: 78,
+        rankPosition: 3,
+        isRecommended: true,
+        winsOver: ["Basecamp"],
+        losesTo: ["Asana"]
+      }
+    ]
+    ```
+    
+    This reveals the competitive landscape in each AI response.
+  </Accordion>
+  
+  <Accordion title="Perception - What narrative is being built?">
+    Extracts how the AI characterizes your brand:
+    
+    ```typescript
+    perception: {
+      coreClaims: [
+        "Comprehensive project management platform",
+        "Strong integration ecosystem",
+        "Enterprise-grade security"
+      ],
+      differentiators: [
+        "Advanced automation capabilities",
+        "Customizable workflows"
+      ],
+      bestKnownFor: "Visual project tracking with timeline views",
+      pricingPerception: "premium"
+    }
+    ```
+    
+    **Pricing perceptions**:
+    - `premium` - Positioned as high-end
+    - `mid_range` - Standard pricing
+    - `budget` - Affordable option
+    - `free` - Free tier or freemium model
+    - `not_mentioned` - No pricing discussion
+  </Accordion>
+</AccordionGroup>
+
+### Risk detection
+
+Analysis automatically identifies potential issues:
+
+```typescript
+risks: {
+  hasRisks: true,
+  items: [
+    {
+      type: "outdated_info",
+      severity: "warning",
+      detail: "Response mentions version 2.0 but current version is 3.5"
+    },
+    {
+      type: "factual_error",
+      severity: "critical",
+      detail: "Claims brand doesn't support mobile, but mobile apps exist"
+    },
+    {
+      type: "negative_association",
+      severity: "warning",
+      detail: "Brand associated with 'complex setup' multiple times"
+    }
+  ]
+}
+```
+
+**Risk types**:
+- `outdated_info` - AI has old information
+- `factual_error` - Incorrect claims about your brand
+- `brand_confusion` - Mixed up with another brand
+- `negative_association` - Linked with unfavorable terms
+- `missing_from_response` - Expected to appear but didn't
+
+**Severity levels**:
+- `critical` - Immediate attention required
+- `warning` - Should be addressed
+- `info` - Worth monitoring
+
+### Actionable recommendations
+
+Each analysis includes prioritized action items:
+
+```typescript
+actions: [
+  {
+    priority: "high",
+    recommendation: "Create content highlighting the new mobile app to update AI knowledge"
+  },
+  {
+    priority: "medium",
+    recommendation: "Develop comparison guides against Asana to improve competitive positioning"
+  },
+  {
+    priority: "low",
+    recommendation: "Monitor sentiment trend for 'setup complexity' over next 30 days"
+  }
+]
+```
+
+## Analysis storage
+
+Analysis results are stored in ClickHouse for efficient querying:
+
+```typescript
+interface PromptAnalysis {
+  id: string;
+  prompt_id: string;
+  workspace_id: string;
+  user_id: string;
+  model_provider: string;
+  prompt: string;
+  brand_analysis: string;  // JSON-stringified BrandAnalysisResult
+  prompt_run_at: string;
+  created_at: string;
+}
+```
+
+This structure enables:
+
+- **Time-series queries** - Track metrics over time
+- **Provider comparisons** - Compare performance across AI platforms
+- **Prompt analysis** - See which prompts generate best visibility
+- **Competitive tracking** - Monitor competitor mentions over time
+
+### Analysis records
+
+The flattened `AnalysisRecord` structure combines response and analysis data:
+
+```typescript
+interface AnalysisRecord {
+  // Identifiers
+  id: string;
+  prompt_id: string;
+  prompt_run_at: string;
+  prompt: string;
+  
+  // Context
+  user_id: string;
+  workspace_id: string;
+  model_provider: string;
+  
+  // Data
+  response: string;
+  sources: Source[];
+  brand_analysis?: BrandAnalysisResult;
+  
+  // Status
+  is_analysed?: boolean;
+  
+  // Timestamp
+  created_at: string;
+}
+```
+
+This enables efficient filtering and aggregation across multiple dimensions.
+
+## Interpreting analysis results
+
+### Single response analysis
+
+For a single prompt/provider combination, analysis reveals:
+
+<Steps>
+  <Step title="Brand presence">
+    Did the AI mention your brand? If yes, how prominently?
+    
+    ```typescript
+    // Example: Strong presence
+    {
+      mentioned: true,
+      mentionCount: 4,
+      visibility: 85,
+      prominence: "significant"
+    }
+    ```
+  </Step>
+  
+  <Step title="Competitive context">
+    Who else was mentioned and how do you compare?
+    
+    ```typescript
+    // Example: You're #2 of 5
+    {
+      rankPosition: 2,
+      totalRanked: 5,
+      isTopThree: true,
+      competitors: ["Competitor A", "Competitor B", ...]
+    }
+    ```
+  </Step>
+  
+  <Step title="Sentiment quality">
+    What's the tone of the mention?
+    
+    ```typescript
+    // Example: Positive with caveats
+    {
+      score: 72,
+      label: "positive",
+      positives: ["Great features", "Easy to use"],
+      negatives: ["Higher price point"]
+    }
+    ```
+  </Step>
+  
+  <Step title="Risk identification">
+    Are there any issues to address?
+    
+    ```typescript
+    // Example: Outdated information
+    {
+      hasRisks: true,
+      items: [{
+        type: "outdated_info",
+        severity: "warning",
+        detail: "Mentions discontinued feature"
+      }]
+    }
+    ```
+  </Step>
+</Steps>
+
+### Aggregate analysis
+
+Across multiple prompts and providers, track:
+
+**Mention rate** - What percentage of responses include your brand?
+
+```typescript
+// Example: 65% mention rate
+const mentionRate = mentionedCount / totalResponses;
+// 13 mentions across 20 responses = 65%
+```
+
+**Average visibility** - How prominently do you appear on average?
+
+```typescript
+// Example: 68/100 average visibility
+const avgVisibility = sum(visibility scores) / mentionedCount;
+```
+
+**Sentiment trend** - Is sentiment improving or declining?
+
+```typescript
+// Example: Positive trend
+[
+  { date: "2026-03-01", sentiment: 65 },
+  { date: "2026-03-08", sentiment: 70 },
+  { date: "2026-03-15", sentiment: 73 }
+]
+```
+
+**Position distribution** - How often do you rank #1, #2, #3, etc.?
+
+```typescript
+// Example: Position breakdown
+{
+  "1": 3,  // Top pick 3 times
+  "2": 5,  // Second place 5 times
+  "3": 4,  // Third place 4 times
+  "null": 8 // Not ranked 8 times
+}
+```
+
+## Analysis metadata
+
+Metadata provides context for filtering and exploration:
+
+```typescript
+interface AnalysisMetadata {
+  available_brands: [
+    { name: "Your Brand", website: "yourbrand.com" },
+    { name: "Competitor A", website: "competitor-a.com" }
+  ],
+  available_models: [
+    "chatgpt",
+    "perplexity",
+    "gemini",
+    "ai-overview"
+  ]
+}
+```
+
+This enables dynamic filtering in the UI:
+
+- Filter by specific competitor
+- Compare performance across providers
+- Track brand mentions over custom time periods
+
+## Analysis API response
+
+The complete analysis API returns:
+
+```typescript
+interface AnalysisResponse {
+  records: AnalysisRecord[];     // Individual response analyses
+  metadata: AnalysisMetadata;     // Available filters
+}
+```
+
+This powers the dashboard views, trend charts, and competitive analysis features.
+
+## Using analysis for strategy
+
+### Content prioritization
+
+Use analysis to guide content creation:
+
+1. **High-risk items** - Address factual errors and outdated information immediately
+2. **Low-visibility topics** - Create content for prompts where you're rarely mentioned
+3. **Competitive gaps** - Develop comparison content for areas where competitors dominate
+4. **Sentiment improvements** - Address recurring negative associations
+
+### Tracking campaigns
+
+Monitor analysis metrics before and after content campaigns:
+
+```typescript
+// Before campaign
+{
+  mentionRate: 0.45,      // 45% of responses
+  avgVisibility: 58,      // Moderate prominence
+  avgSentiment: 65,       // Positive
+  avgPosition: 3.2        // Usually #3
+}
+
+// After campaign (2 months later)
+{
+  mentionRate: 0.72,      // 72% of responses (↑ 27%)
+  avgVisibility: 78,      // High prominence (↑ 20)
+  avgSentiment: 74,       // More positive (↑ 9)
+  avgPosition: 2.1        // Usually #2 (↑ 1.1)
+}
+```
+
+### Competitive intelligence
+
+Analyze competitor metrics to understand market positioning:
+
+- Which competitors appear most frequently?
+- What are their key differentiators according to AI?
+- Where do they rank relative to your brand?
+- What's their sentiment score?
+
+This intelligence informs competitive strategy and messaging.
+
+## Related resources
+
+<CardGroup cols={2}>
+  <Card title="Interpreting Metrics" icon="gauge" href="/guides/interpreting-metrics">
+    Detailed guide to understanding and acting on analysis data
+  </Card>
+  <Card title="Prompts" icon="message" href="/concepts/prompts">
+    Learn how to create prompts that generate useful analysis
+  </Card>
+  <Card title="Providers" icon="brain" href="/concepts/providers">
+    Understand provider-specific analysis differences
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/analysis">
+    Technical documentation for the analysis API
+  </Card>
+</CardGroup>

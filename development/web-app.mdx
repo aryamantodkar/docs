@@ -1,0 +1,480 @@
+---
+title: Web App Architecture
+description: Technical documentation for the OneGlanse Next.js web application
+---
+
+## Overview
+
+The OneGlanse web app is built with **Next.js 15** using the App Router, **tRPC** for type-safe APIs, and **Better Auth** for authentication. It provides the user interface for managing workspaces, prompts, and viewing brand intelligence analytics.
+
+## Tech Stack
+
+- **Framework**: Next.js 15 with App Router
+- **API Layer**: tRPC v11 with React Query
+- **Authentication**: Better Auth with Drizzle adapter
+- **Database**: PostgreSQL via Drizzle ORM
+- **UI**: React 19, Tailwind CSS 4
+- **State Management**: React Query (TanStack Query)
+
+## Project Structure
+
+```
+apps/web/src/
+├── app/                      # Next.js App Router
+│   ├── (auth)/              # Authenticated routes
+│   │   ├── dashboard/       # Analytics dashboard
+│   │   ├── prompts/         # Prompt management
+│   │   ├── sources/         # Source citations
+│   │   ├── schedule/        # Cron scheduling
+│   │   ├── settings/        # Workspace settings
+│   │   └── workspace/       # Workspace management
+│   ├── api/
+│   │   ├── auth/[...all]/   # Better Auth endpoints
+│   │   └── trpc/[trpc]/     # tRPC HTTP handler
+│   ├── login/               # Login page
+│   ├── signup/              # Signup page
+│   └── layout.tsx           # Root layout
+├── server/
+│   └── api/
+│       ├── trpc.ts          # tRPC context & init
+│       ├── root.ts          # Router composition
+│       ├── procedures.ts    # Procedure definitions
+│       ├── middleware/      # Auth, rate limiting, etc.
+│       └── routers/         # API routers
+├── trpc/
+│   ├── react.tsx            # Client tRPC provider
+│   └── query-client.ts      # React Query config
+├── components/              # Shared UI components
+└── lib/
+    └── auth/                # Auth configuration
+```
+
+## tRPC Setup
+
+### Server-Side Context
+
+The tRPC context provides database access and session information to all procedures:
+
+```typescript apps/web/src/server/api/trpc.ts
+import { auth } from "@lib/auth/auth";
+import { db } from "@oneglanse/db";
+import { initTRPC } from "@trpc/server";
+import superjson from "superjson";
+
+export const createTRPCContext = async (opts: { headers: Headers }) => {
+  const session = await auth.api.getSession({ headers: opts.headers });
+  
+  return {
+    db,
+    auth,
+    session,
+    ...opts,
+  };
+};
+
+export const t = initTRPC.context<typeof createTRPCContext>().create({
+  transformer: superjson,
+  errorFormatter({ shape, error }) {
+    const domainError = error.cause instanceof BaseError ? error.cause : null;
+    return {
+      ...shape,
+      data: {
+        ...shape.data,
+        zodError: error.cause instanceof ZodError ? error.cause.flatten() : null,
+        domainCode: domainError?.code ?? null,
+        meta: domainError?.meta ?? null,
+        isOperational: domainError?.isOperational ?? null,
+      },
+    };
+  },
+});
+```
+
+**Reference**: `apps/web/src/server/api/trpc.ts:10-37`
+
+### Client-Side Provider
+
+The client uses `httpBatchStreamLink` for efficient request batching:
+
+```typescript apps/web/src/trpc/react.tsx
+export const api = createTRPCReact<AppRouter>();
+
+export function TRPCReactProvider(props: { children: React.ReactNode }) {
+  const queryClient = getQueryClient();
+  
+  const [trpcClient] = useState(() =>
+    api.createClient({
+      links: [
+        loggerLink({
+          enabled: (op) =>
+            process.env.NODE_ENV === "development" ||
+            (op.direction === "down" && op.result instanceof Error),
+        }),
+        httpBatchStreamLink({
+          transformer: SuperJSON,
+          url: `${getBaseUrl()}/api/trpc`,
+          headers: () => {
+            const headers = new Headers();
+            headers.set("x-trpc-source", "nextjs-react");
+            return headers;
+          },
+        }),
+      ],
+    }),
+  );
+  
+  return (
+    <QueryClientProvider client={queryClient}>
+      <api.Provider client={trpcClient} queryClient={queryClient}>
+        {props.children}
+      </api.Provider>
+    </QueryClientProvider>
+  );
+}
+```
+
+**Reference**: `apps/web/src/trpc/react.tsx:41-72`
+
+### Router Composition
+
+All API routers are composed in a single `appRouter`:
+
+```typescript apps/web/src/server/api/root.ts
+import { agentRouter } from "./routers/agent";
+import { analysisRouter } from "./routers/analysis";
+import { promptRouter } from "./routers/prompt";
+import { workspaceRouter } from "./routers/workspace";
+
+export const appRouter = createTRPCRouter({
+  workspace: workspaceRouter,
+  prompt: promptRouter,
+  analysis: analysisRouter,
+  agent: agentRouter,
+  internal: internalRouter,
+});
+
+export type AppRouter = typeof appRouter;
+```
+
+**Reference**: `apps/web/src/server/api/root.ts:10-18`
+
+## Authentication
+
+### Better Auth Configuration
+
+Better Auth is configured with Google OAuth and email/password authentication:
+
+```typescript apps/web/src/lib/auth/auth.ts
+import { db, schema } from "@oneglanse/db";
+import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { organization } from "better-auth/plugins";
+
+export const auth = betterAuth({
+  secret: env.BETTER_AUTH_SECRET,
+  socialProviders: {
+    google: {
+      clientId: env.GOOGLE_CLIENT_ID,
+      clientSecret: env.GOOGLE_CLIENT_SECRET,
+    },
+  },
+  emailAndPassword: {
+    enabled: true,
+  },
+  database: drizzleAdapter(db, {
+    provider: "pg",
+    schema: {
+      ...schema,
+      ...authSchema,
+    },
+  }),
+  plugins: [organization(), nextCookies()],
+});
+```
+
+**Reference**: `apps/web/src/lib/auth/auth.ts:10-48`
+
+### Authentication Middleware
+
+Protected procedures use the `isAuthenticated` middleware:
+
+```typescript apps/web/src/server/api/procedures.ts
+export const protectedProcedure = baseProcedure.use(isAuthenticated);
+
+export const authorizedWorkspaceProcedure = baseProcedure
+  .input(schema.workspaceInput)
+  .use(validWorkspace);
+```
+
+**Reference**: `apps/web/src/server/api/procedures.ts:14-17`
+
+## Key Routes and Pages
+
+### Dashboard Page
+
+The main analytics dashboard displays brand intelligence data:
+
+```typescript apps/web/src/app/(auth)/dashboard/page.tsx
+export default function Dashboard() {
+  const searchParams = useSearchParams();
+  const workspaceId = searchParams.get("workspace") ?? "";
+  
+  const { data: analysedPromptData, isLoading } = 
+    useFetchAnalysedPrompts(workspaceId);
+  
+  const { data: workspace } = api.workspace.getById.useQuery(
+    { workspaceId },
+    { enabled: !!workspaceId }
+  );
+  
+  // Filter state persisted in URL
+  const modelFilter = searchParams.get("model") ?? "All Models";
+  const timeFilter = searchParams.get("time") ?? "all";
+  
+  const metrics = useDashboardData(
+    analysedPromptData ?? [],
+    modelFilter,
+    timeFilter,
+    { name: workspace?.name, domain: workspace?.domain }
+  );
+  
+  return (
+    <div className="web-page-wide">
+      <AggregateStatsRow
+        presenceRate={metrics.aggregateStats.presenceRate}
+        rank={metrics.avgRank.position ?? 0}
+        topSource={metrics.sourcesIntelligence[0]?.domain ?? "N/A"}
+        topCompetitor={metrics.aggregateStats.topCompetitor}
+      />
+      <CompetitiveLandscape competitors={metrics.competitorData} />
+      <TopSources sources={metrics.sourcesIntelligence} />
+      <BrandComparisonChart competitors={metrics.competitorData} />
+    </div>
+  );
+}
+```
+
+**Reference**: `apps/web/src/app/(auth)/dashboard/page.tsx:34-209`
+
+### Prompt Management
+
+Users can store and manage prompts through the prompts router:
+
+```typescript apps/web/src/server/api/routers/prompt/prompt.ts
+export const promptRouter = createTRPCRouter({
+  store: authorizedWorkspaceProcedure
+    .input(
+      z.object({
+        prompts: z.array(z.string().min(1).max(500)).min(1).max(100),
+      })
+    )
+    .use(createRateLimiter("prompt.store", { limit: 20, windowSecs: 60 }))
+    .mutation(async ({ input, ctx }) => {
+      const { prompts } = input;
+      const { user: { id: userId }, workspaceId } = ctx;
+      
+      return storePromptsForWorkspace({
+        prompts,
+        workspaceId,
+        userId,
+      });
+    }),
+  
+  fetchUserPrompts: authorizedWorkspaceProcedure.query(async ({ ctx }) => {
+    return fetchUserPromptsForWorkspace({ workspaceId: ctx.workspaceId });
+  }),
+});
+```
+
+**Reference**: `apps/web/src/server/api/routers/prompt/prompt.ts:14-54`
+
+## Adding New Features
+
+### 1. Create a New tRPC Router
+
+Create a new router file in `server/api/routers/`:
+
+```typescript server/api/routers/myfeature/myfeature.ts
+import { createTRPCRouter } from "@/server/api/trpc";
+import { authorizedWorkspaceProcedure } from "../../procedures";
+import { z } from "zod";
+
+export const myFeatureRouter = createTRPCRouter({
+  getData: authorizedWorkspaceProcedure
+    .input(z.object({ filter: z.string().optional() }))
+    .query(async ({ input, ctx }) => {
+      const { workspaceId } = ctx;
+      // Call service layer
+      return getMyData({ workspaceId, filter: input.filter });
+    }),
+  
+  updateData: authorizedWorkspaceProcedure
+    .input(z.object({ id: z.string(), data: z.any() }))
+    .mutation(async ({ input, ctx }) => {
+      return updateMyData(input);
+    }),
+});
+```
+
+### 2. Add Router to Root
+
+Register the router in `server/api/root.ts`:
+
+```typescript
+import { myFeatureRouter } from "./routers/myfeature";
+
+export const appRouter = createTRPCRouter({
+  // ... existing routers
+  myFeature: myFeatureRouter,
+});
+```
+
+### 3. Create a Page
+
+Add a new page in `app/(auth)/myfeature/page.tsx`:
+
+```typescript
+"use client";
+
+import { api } from "@/trpc/react";
+import { useSearchParams } from "next/navigation";
+
+export default function MyFeaturePage() {
+  const searchParams = useSearchParams();
+  const workspaceId = searchParams.get("workspace") ?? "";
+  
+  const { data, isLoading } = api.myFeature.getData.useQuery(
+    { workspaceId },
+    { enabled: !!workspaceId }
+  );
+  
+  const updateMutation = api.myFeature.updateData.useMutation();
+  
+  return (
+    <div>
+      {/* Your component */}
+    </div>
+  );
+}
+```
+
+### 4. Implement Service Layer
+
+Create service functions in `packages/services/src/myfeature/`:
+
+```typescript
+import { db, clickhouse } from "@oneglanse/db";
+
+export async function getMyData(args: { workspaceId: string }) {
+  return db.query.myTable.findMany({
+    where: eq(schema.myTable.workspaceId, args.workspaceId),
+  });
+}
+```
+
+### 5. Add Middleware (Optional)
+
+For rate limiting or custom authorization:
+
+```typescript
+import { createRateLimiter } from "../../middleware/rateLimit";
+
+export const myFeatureRouter = createTRPCRouter({
+  expensiveOperation: authorizedWorkspaceProcedure
+    .use(createRateLimiter("myfeature.expensive", { limit: 5, windowSecs: 60 }))
+    .mutation(async ({ ctx }) => {
+      // Protected by rate limiter
+    }),
+});
+```
+
+## Environment Variables
+
+Required environment variables for the web app:
+
+```bash
+# Database
+DATABASE_URL=postgresql://user:pass@localhost:5432/oneglanse
+
+# Better Auth
+BETTER_AUTH_SECRET=your-secret-key
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# Redis (for rate limiting)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+
+# ClickHouse
+CLICKHOUSE_URL=http://localhost:8123
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASSWORD=
+CLICKHOUSE_DB=analytics
+```
+
+## Performance Considerations
+
+### React Query Configuration
+
+The query client is configured with optimal stale time for SSR:
+
+```typescript apps/web/src/trpc/query-client.ts
+export const createQueryClient = () =>
+  new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 30 * 1000, // 30 seconds
+      },
+      dehydrate: {
+        serializeData: SuperJSON.serialize,
+        shouldDehydrateQuery: (query) =>
+          defaultShouldDehydrateQuery(query) ||
+          query.state.status === "pending",
+      },
+      hydrate: {
+        deserializeData: SuperJSON.deserialize,
+      },
+    },
+  });
+```
+
+**Reference**: `apps/web/src/trpc/query-client.ts:7-25`
+
+### Request Batching
+
+tRPC automatically batches multiple queries made within the same tick:
+
+```typescript
+// These will be batched into a single HTTP request
+const [workspaces, prompts, analysis] = await Promise.all([
+  api.workspace.getAll.useQuery(),
+  api.prompt.fetchUserPrompts.useQuery({ workspaceId }),
+  api.analysis.getStats.useQuery({ workspaceId }),
+]);
+```
+
+## Development Commands
+
+```bash
+# Start development server
+pnpm dev
+
+# Type checking
+pnpm typecheck
+
+# Build for production
+pnpm build
+
+# Database migrations
+pnpm db:generate  # Generate migration
+pnpm db:migrate   # Run migrations
+pnpm db:push      # Push schema (dev only)
+pnpm db:studio    # Open Drizzle Studio
+```
+
+## Related Documentation
+
+- [Services Layer](/development/services-layer) - Business logic and data access
+- [Database](/development/database) - Schema and migrations
+- [Agent Worker](/development/agent-worker) - Background job processing

@@ -1,0 +1,311 @@
+---
+title: 'Analysis API'
+description: 'Analyze prompts to extract brand mentions and metrics'
+---
+
+## Overview
+
+The Analysis API processes stored prompts to identify brand mentions, extract metrics, and provide insights into how AI providers reference your brand and competitors.
+
+## Endpoints
+
+### analyzeMetrics
+
+Analyze prompts for a workspace to extract brand mentions and generate metrics.
+
+**Type**: Mutation (Authorized Workspace)
+
+**Rate Limit**: 10 requests per minute
+
+<ParamField path="workspaceId" type="string" required>
+  ID of the workspace to analyze prompts for
+</ParamField>
+
+<ParamField path="analyzeAll" type="boolean" optional default="true">
+  Whether to analyze all prompts or only unanalyzed ones
+  
+  - `true`: Re-analyze all prompts in the workspace
+  - `false`: Only analyze prompts that haven't been analyzed yet
+</ParamField>
+
+<ResponseField name="analyzed" type="number">
+  Number of prompts that were analyzed
+</ResponseField>
+
+<ResponseField name="mentions" type="number">
+  Total number of brand mentions found
+</ResponseField>
+
+<ResponseField name="prompts" type="array">
+  Array of analyzed prompt results
+</ResponseField>
+
+<CodeGroup>
+```typescript Request
+const result = await trpc.analysis.analyzeMetrics.mutate({
+  workspaceId: "ws_abc123",
+  analyzeAll: false // Only analyze new prompts
+});
+```
+
+```typescript Response
+{
+  analyzed: 15,
+  mentions: 8,
+  prompts: [
+    {
+      promptId: "prompt_123",
+      content: "What is the best project management tool for startups?",
+      mentions: [
+        {
+          brand: "Asana",
+          context: "mentioned as top choice",
+          sentiment: "positive",
+          position: 1
+        },
+        {
+          brand: "Monday.com",
+          context: "alternative option",
+          sentiment: "neutral",
+          position: 2
+        }
+      ],
+      analyzedAt: Date
+    },
+    {
+      promptId: "prompt_124",
+      content: "Compare Asana vs Monday for team collaboration",
+      mentions: [
+        {
+          brand: "Asana",
+          context: "direct comparison",
+          sentiment: "positive",
+          position: 1
+        },
+        {
+          brand: "Monday.com",
+          context: "direct comparison",
+          sentiment: "positive",
+          position: 1
+        }
+      ],
+      analyzedAt: Date
+    }
+  ]
+}
+```
+</CodeGroup>
+
+### When to Use analyzeAll
+
+**Incremental Analysis (`analyzeAll: false`)**
+- Use when you want to analyze only newly added prompts
+- More efficient for workspaces with many prompts
+- Recommended for regular/scheduled analysis
+
+**Complete Re-analysis (`analyzeAll: true`)**
+- Use when you've updated your brand tracking configuration
+- Useful for backfilling analysis after adding new competitors
+- Use when you want to ensure all prompts reflect the latest analysis logic
+
+---
+
+### fetchAnalysis
+
+Retrieve analyzed prompt data and brand mention metrics for the workspace.
+
+**Type**: Query (Authorized Workspace)
+
+<ParamField path="workspaceId" type="string" required>
+  ID of the workspace
+</ParamField>
+
+<ResponseField name="prompts" type="array">
+  Array of analyzed prompts with brand mentions
+</ResponseField>
+
+<ResponseField name="totalPrompts" type="number">
+  Total number of prompts analyzed
+</ResponseField>
+
+<ResponseField name="totalMentions" type="number">
+  Total number of brand mentions found
+</ResponseField>
+
+<ResponseField name="brandBreakdown" type="array">
+  Aggregated statistics per brand
+</ResponseField>
+
+<CodeGroup>
+```typescript Request
+const analysis = await trpc.analysis.fetchAnalysis.query({
+  workspaceId: "ws_abc123"
+});
+```
+
+```typescript Response
+{
+  totalPrompts: 45,
+  totalMentions: 32,
+  brandBreakdown: [
+    {
+      brand: "Asana",
+      mentions: 12,
+      averagePosition: 1.8,
+      sentimentBreakdown: {
+        positive: 9,
+        neutral: 2,
+        negative: 1
+      }
+    },
+    {
+      brand: "Monday.com",
+      mentions: 10,
+      averagePosition: 2.1,
+      sentimentBreakdown: {
+        positive: 7,
+        neutral: 3,
+        negative: 0
+      }
+    }
+  ],
+  prompts: [
+    {
+      id: "prompt_123",
+      content: "What is the best project management tool for startups?",
+      mentions: [
+        {
+          brand: "Asana",
+          context: "mentioned as top choice",
+          sentiment: "positive",
+          position: 1
+        }
+      ],
+      analyzedAt: Date,
+      createdAt: Date
+    }
+  ]
+}
+```
+</CodeGroup>
+
+---
+
+## Analysis Workflow
+
+A typical workflow for analyzing brand mentions:
+
+### 1. Store Prompts
+
+First, add prompts to your workspace:
+
+```typescript
+await trpc.prompt.store.mutate({
+  workspaceId: "ws_abc123",
+  prompts: [
+    "What are the best alternatives to Salesforce?",
+    "Compare HubSpot vs Salesforce for small teams"
+  ]
+});
+```
+
+### 2. Run Analysis
+
+Analyze the prompts to extract brand mentions:
+
+```typescript
+const result = await trpc.analysis.analyzeMetrics.mutate({
+  workspaceId: "ws_abc123",
+  analyzeAll: false // Only analyze new prompts
+});
+
+console.log(`Analyzed ${result.analyzed} prompts, found ${result.mentions} mentions`);
+```
+
+### 3. Fetch Results
+
+Retrieve the analyzed data:
+
+```typescript
+const analysis = await trpc.analysis.fetchAnalysis.query({
+  workspaceId: "ws_abc123"
+});
+
+// Access brand breakdown
+analysis.brandBreakdown.forEach(brand => {
+  console.log(`${brand.brand}: ${brand.mentions} mentions, avg position ${brand.averagePosition}`);
+});
+```
+
+---
+
+## Understanding Analysis Results
+
+### Brand Mentions
+
+Each mention includes:
+
+- **brand**: The name of the brand or company mentioned
+- **context**: The context in which the brand was mentioned
+- **sentiment**: Sentiment analysis (positive, neutral, negative)
+- **position**: Ranking position when mentioned in a list (1 = first mentioned)
+
+### Position Tracking
+
+Position indicates where a brand appears in AI responses:
+
+- **Position 1**: First brand mentioned (highest visibility)
+- **Position 2+**: Subsequent mentions
+- Lower average positions indicate better visibility
+
+### Sentiment Analysis
+
+Sentiment values:
+
+- **positive**: Brand mentioned favorably
+- **neutral**: Brand mentioned without sentiment
+- **negative**: Brand mentioned unfavorably
+
+---
+
+## Performance Considerations
+
+### Incremental Analysis
+
+For workspaces with many prompts, use incremental analysis:
+
+```typescript
+// Only analyze new prompts since last analysis
+const result = await trpc.analysis.analyzeMetrics.mutate({
+  workspaceId: "ws_abc123",
+  analyzeAll: false
+});
+```
+
+### Complete Re-analysis
+
+When you need to re-analyze all historical data:
+
+```typescript
+// Re-analyze all prompts (slower but comprehensive)
+const result = await trpc.analysis.analyzeMetrics.mutate({
+  workspaceId: "ws_abc123",
+  analyzeAll: true
+});
+```
+
+---
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Prompts API" icon="message" href="/api/prompts">
+    Store prompts for analysis
+  </Card>
+  <Card title="Agent API" icon="robot" href="/api/agent">
+    Automate prompt collection and analysis
+  </Card>
+  <Card title="Workspace API" icon="building" href="/api/workspace">
+    Configure workspace settings
+  </Card>
+</CardGroup>

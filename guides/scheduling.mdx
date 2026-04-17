@@ -1,0 +1,605 @@
+---
+title: 'Scheduling Automated Runs'
+description: 'Configure recurring prompt runs to track brand visibility trends across AI providers over time'
+---
+
+## Overview
+
+Scheduling automates regular prompt execution, allowing you to track how AI visibility changes over time without manual intervention.
+
+<Note>
+  Every schedule change triggers an **immediate run** in addition to the recurring schedule. This ensures you have fresh data right away.
+</Note>
+
+## Accessing Schedule Settings
+
+1. Navigate to **Schedule** from the sidebar
+2. Select your workspace (if you have multiple)
+
+### Schedule Page Layout
+
+The schedule interface displays:
+
+```tsx
+// From apps/web/src/app/(auth)/schedule/page.tsx:196
+<div className="web-page-panel">
+  <h1>Prompt Schedule</h1>
+  <p>
+    Configure how often your prompts are automatically run across all AI
+    providers and analyzed.
+  </p>
+
+  {/* Timing cards */}
+  <div className="grid grid-cols-2 gap-4">
+    <div>Next Scheduled Run: {nextRun}</div>
+    <div>Last Prompt Run: {lastRun}</div>
+  </div>
+
+  {/* Schedule options */}
+  <div>
+    {SCHEDULE_OPTIONS.map(option => (
+      <button onClick={() => setSelected(option.value)}>
+        {option.label}
+      </button>
+    ))}
+  </div>
+</div>
+```
+
+## Setting Up a Schedule
+
+<Steps>
+  <Step title="Choose a Frequency">
+    Select from predefined schedule options:
+
+    <Tabs>
+      <Tab title="Every 12 hours">
+        **Cron**: `0 */12 * * *`
+
+        Runs twice daily starting at midnight (00:00 and 12:00 in your local timezone).
+
+        **Best for**: High-frequency monitoring during active campaigns or product launches.
+      </Tab>
+
+      <Tab title="Every day at midnight">
+        **Cron**: `0 {localHourToUTC(0)} * * *`
+
+        Runs once daily at 00:00 in your local timezone.
+
+        **Best for**: Standard daily tracking with fresh morning data.
+
+        <Tip>
+          The schedule automatically converts your local midnight to UTC. For example, if you're in EST (UTC-5), the cron becomes `0 5 * * *`.
+        </Tip>
+      </Tab>
+
+      <Tab title="Every 2 days at midnight">
+        **Cron**: `0 {localHourToUTC(0)} */2 * *`
+
+        Runs every other day at midnight.
+
+        **Best for**: Regular monitoring with reduced API costs.
+      </Tab>
+
+      <Tab title="Every week (Sunday midnight)">
+        **Cron**: `0 {localHourToUTC(0)} * * 0`
+
+        Runs weekly on Sunday at midnight.
+
+        **Best for**: Low-frequency tracking or stable categories with slow AI training updates.
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Save the Schedule">
+    Click **Save Schedule**. OneGlance will:
+
+    1. Persist the cron expression to the database
+    2. Trigger an immediate run
+    3. Schedule future executions via pg_cron
+
+    ```typescript
+    // From apps/web/src/app/(auth)/schedule/page.tsx:134
+    const handleSave = async () => {
+      const result = await setScheduleMutation.mutateAsync({
+        workspaceId,
+        schedule: selected,
+      });
+
+      if (result.immediateRun?.status === 'queued') {
+        toast.success('Schedule saved and immediate run started.');
+      } else if (result.immediateRun?.status === 'empty') {
+        toast.warning('Schedule saved, but no prompts configured.');
+      }
+    };
+    ```
+  </Step>
+
+  <Step title="Monitor Next Run">
+    The **Next Scheduled Run** card displays:
+    - Time until next execution ("In 2 hours")
+    - Absolute timestamp for far-future runs
+
+    ```typescript
+    // From apps/web/src/app/(auth)/schedule/page.tsx:34
+    function formatRelativeTime(timestamp: string | null): string {
+      const date = new Date(timestamp);
+      const diffHours = Math.floor((date.getTime() - now.getTime()) / 3600000);
+
+      if (diffHours < 24) {
+        return `In ${diffHours} hour${diffHours !== 1 ? 's' : ''}`;
+      }
+      // ... more formatting
+    }
+    ```
+  </Step>
+</Steps>
+
+## How Scheduling Works
+
+### Architecture Overview
+
+Scheduling uses PostgreSQL's `pg_cron` extension:
+
+```sql
+-- From packages/services/src/prompt/scheduler.ts:105
+SELECT cron.schedule(
+  'auto_run_prompts_{workspaceId}',  -- Schedule name
+  '0 */12 * * *',                    -- Cron expression
+  $$ -- SQL to execute
+    SELECT http_post(
+      current_setting('app.api_base_url') || '/api/trpc/internal.runPrompts',
+      jsonb_build_object(...),
+      jsonb_build_object('Authorization', 'Bearer ' || current_setting('app.cron_secret'))
+    );
+  $$
+);
+```
+
+### Execution Flow
+
+<Steps>
+  <Step title="Cron Trigger">
+    At the scheduled time, pg_cron executes the stored SQL.
+  </Step>
+
+  <Step title="API Request">
+    The SQL makes an HTTP POST to `/api/trpc/internal.runPrompts` with:
+    - `workspaceId`
+    - `userId` (workspace owner)
+    - `Authorization` header with internal cron secret
+  </Step>
+
+  <Step title="Job Submission">
+    The endpoint calls `submitAgentJobGroup`:
+
+    ```typescript
+    // From packages/services/src/agent/jobs.ts:18
+    export async function submitAgentJobGroup(args: {
+      workspaceId: string;
+      userId: string;
+    }): Promise<SubmitAgentJobResult> {
+      const prompts = await fetchUserPromptsForWorkspace({ workspaceId });
+      if (!prompts || prompts.length === 0) {
+        return { status: 'empty' };
+      }
+
+      const jobGroupId = randomUUID();
+      const workspace = await getWorkspaceById({ workspaceId });
+      const enabledProviders = JSON.parse(workspace.enabledProviders);
+
+      await Promise.all(
+        enabledProviders.map((provider) =>
+          getProviderQueue(provider).add('run-agent', {
+            jobGroupId,
+            provider,
+            prompts,
+            user_id: userId,
+            workspace_id: workspaceId,
+          })
+        )
+      );
+
+      return { status: 'queued', jobGroupId };
+    }
+    ```
+  </Step>
+
+  <Step title="Provider Execution">
+    Worker agents (apps/agent) consume jobs from BullMQ queues:
+    - One queue per provider (ChatGPT, Claude, etc.)
+    - Playwright automation runs each prompt
+    - Responses stored in ClickHouse
+  </Step>
+
+  <Step title="Analysis">
+    After responses are collected, OpenAI analyzes them for:
+    - Brand mentions
+    - Sentiment and positioning
+    - GEO scores
+    - Competitor comparisons
+  </Step>
+</Steps>
+
+### Timezone Handling
+
+Schedules use **your local timezone** but are stored as **UTC cron expressions**.
+
+```typescript
+// From apps/web/src/app/(auth)/schedule/page.tsx:10
+function localHourToUTC(localHour: number): number {
+  const now = new Date();
+  now.setHours(localHour, 0, 0, 0);
+  return now.getUTCHours();
+}
+
+// Example: User in EST (UTC-5) selects "Every day at midnight"
+const cronExpression = `0 ${localHourToUTC(0)} * * *`;
+// Result: "0 5 * * *" (5 AM UTC = midnight EST)
+```
+
+<Warning>
+  Daylight Saving Time shifts are **not** automatically adjusted. If you're in a DST-observing timezone:
+  - Spring forward: Schedule shifts 1 hour earlier
+  - Fall back: Schedule shifts 1 hour later
+
+  Update your schedule after DST changes to maintain the desired local time.
+</Warning>
+
+## Disabling a Schedule
+
+<Steps>
+  <Step title="Click Disable">
+    On the Schedule page, click **Disable** next to the active schedule indicator.
+  </Step>
+
+  <Step title="Confirm">
+    The schedule is removed from pg_cron:
+
+    ```typescript
+    // From packages/services/src/prompt/scheduler.ts:112
+    export async function unscheduleCronForPrompts(
+      args: UnscheduleCronForPromptsArgs
+    ): Promise<void> {
+      const { workspaceId } = args;
+      const scheduleName = `auto_run_prompts_${workspaceId}`;
+
+      try {
+        await pool.query('SELECT cron.unschedule($1);', [scheduleName]);
+      } catch {
+        // Schedule may not exist
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Manual Runs Only">
+    After disabling, prompts only run when you:
+    - Manually trigger from the Schedule page
+    - Re-enable a schedule (triggers immediate run)
+    - Use the API to submit jobs
+  </Step>
+</Steps>
+
+## Manual Run Triggers
+
+Even with a schedule disabled, you can run prompts on-demand.
+
+### From the Schedule Page
+
+1. Disable the current schedule (if any)
+2. Select a frequency
+3. Click **Save Schedule**
+
+This triggers an immediate run and sets the recurring schedule.
+
+### From the Dashboard
+
+No direct "Run Now" button exists on the dashboard. Navigate to Schedule → Save Schedule to trigger.
+
+<Tip>
+  **Workaround**: To trigger a run without changing your schedule, temporarily select the same frequency you already have, then click Save. This queues an immediate run without modifying the cron expression.
+</Tip>
+
+## Monitoring Scheduled Runs
+
+### Last Prompt Run Card
+
+Displays the most recent execution time (scheduled or manual):
+
+```typescript
+// From apps/web/src/app/(auth)/schedule/page.tsx:242
+<div>
+  <span>Last Prompt Run</span>
+  <p>{formatAbsoluteTime(cronTimingQuery.data?.lastPromptRun)}</p>
+</div>
+```
+
+Example: `Dec 15, 2025, 12:00:34 AM`
+
+### Next Scheduled Run Card
+
+Shows when the next execution will occur:
+
+```typescript
+// From apps/web/src/app/(auth)/schedule/page.tsx:234
+<div>
+  <span>Next Scheduled Run</span>
+  <p>
+    {currentSchedule && cronTimingQuery.data?.nextRun
+      ? formatRelativeTime(cronTimingQuery.data.nextRun)
+      : 'Not scheduled'}
+  </p>
+</div>
+```
+
+Example: `In 4 hours`
+
+### Real-Time Updates
+
+The timing cards refresh every 60 seconds:
+
+```typescript
+// From apps/web/src/app/(auth)/schedule/page.tsx:112
+const cronTimingQuery = api.workspace.getCronTiming.useQuery(
+  { workspaceId },
+  {
+    enabled: !!workspaceId,
+    refetchInterval: 60000,  // 60 seconds
+    refetchIntervalInBackground: false,
+  }
+);
+```
+
+## Schedule Best Practices
+
+### 1. Align Frequency with Business Goals
+
+<AccordionGroup>
+  <Accordion title="High-Frequency (Every 12 hours)">
+    **Use cases**:
+    - Active product launches
+    - Competitive campaigns
+    - Rapid content publishing
+    - Crisis monitoring
+
+    **Considerations**:
+    - Higher API costs
+    - More data storage
+    - May detect short-term fluctuations (noise)
+  </Accordion>
+
+  <Accordion title="Daily (Once per day)">
+    **Use cases**:
+    - Standard ongoing monitoring
+    - Content marketing programs
+    - Weekly/monthly reporting cadence
+
+    **Considerations**:
+    - Balanced cost and coverage
+    - Captures day-over-day trends
+    - Recommended for most users
+  </Accordion>
+
+  <Accordion title="Low-Frequency (Every 2 days or weekly)">
+    **Use cases**:
+    - Stable categories with slow AI training updates
+    - Budget-conscious monitoring
+    - Mature brands with established visibility
+
+    **Considerations**:
+    - Reduced costs
+    - May miss short-term events
+    - Sufficient for trend analysis
+  </Accordion>
+</AccordionGroup>
+
+### 2. Schedule Around Content Publishing
+
+If you publish blog posts, press releases, or major updates, schedule runs to measure impact:
+
+```
+Example:
+- Monday 9 AM: Publish blog post
+- Tuesday 12 AM: Scheduled run (24h after)
+- Thursday 12 AM: Scheduled run (72h after)
+- Next Monday 12 AM: Scheduled run (1 week after)
+
+Compare GEO scores before and after to measure lift.
+```
+
+### 3. Coordinate with Team Workflows
+
+Align schedule timing with team meetings:
+
+```
+Marketing team meets every Monday 10 AM
+→ Schedule: Every week (Sunday midnight)
+→ Fresh data ready for Monday morning review
+```
+
+### 4. Account for AI Provider Updates
+
+Major AI providers (OpenAI, Anthropic, Google) release model updates periodically. Schedule runs after known update windows to measure impact.
+
+Example:
+- ChatGPT model update: December 1st
+- Run prompts: December 2nd, 9th, 16th (weekly)
+- Compare: Did rankings/sentiment change post-update?
+
+## Understanding Schedule Notifications
+
+When you save a schedule, OneGlance shows different toast notifications:
+
+<AccordionGroup>
+  <Accordion title="Schedule saved and immediate run started">
+    **Meaning**: Your prompts are queued and executing now.
+
+    **Next steps**: Monitor progress on the Dashboard or Prompts page.
+  </Accordion>
+
+  <Accordion title="Schedule saved, but no prompts are configured for this workspace">
+    **Meaning**: Schedule is active, but you have zero prompts.
+
+    **Solution**: 
+    1. Go to Prompts page
+    2. Add at least one prompt
+    3. Return to Schedule and click Save again
+
+    From `apps/web/src/app/(auth)/schedule/page.tsx:148`:
+    ```tsx
+    if (result.immediateRun?.status === 'empty') {
+      toast.warning(
+        'Schedule saved, but no prompts are configured for this workspace.'
+      );
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Schedule saved, but immediate run failed">
+    **Meaning**: The cron schedule was persisted, but the initial run encountered an error.
+
+    **Common causes**:
+    - Network issues
+    - Provider API rate limits
+    - Temporary worker unavailability
+
+    **Solution**: Wait for the next scheduled execution. If the issue persists, check the browser console for error details.
+  </Accordion>
+
+  <Accordion title="Schedule disabled">
+    **Meaning**: No future runs will execute automatically.
+
+    **Result**: The pg_cron job is removed, but past data remains.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Next run time doesn't match my timezone">
+    **Cause**: The UI displays relative time ("In 5 hours") which may appear incorrect if your system clock is wrong.
+
+    **Solution**: Verify your computer's timezone settings. The schedule uses your **browser's** reported timezone, not the server's.
+  </Accordion>
+
+  <Accordion title="Scheduled run didn't execute at expected time">
+    **Possible causes**:
+    1. pg_cron extension not running (self-hosted only)
+    2. Database connection lost
+    3. Cron secret misconfigured
+
+    **Diagnosis**:
+    ```sql
+    -- Check active cron jobs
+    SELECT * FROM cron.job WHERE jobname LIKE 'auto_run_prompts_%';
+
+    -- Check recent cron run history
+    SELECT * FROM cron.job_run_details
+    WHERE jobid IN (SELECT jobid FROM cron.job WHERE jobname LIKE 'auto_run_prompts_%')
+    ORDER BY start_time DESC
+    LIMIT 10;
+    ```
+
+    **Solution**: For self-hosted deployments, ensure:
+    - `pg_cron` is installed and running
+    - `API_BASE_URL` and `INTERNAL_CRON_SECRET` env vars are set (packages/services/src/prompt/scheduler.ts:18)
+  </Accordion>
+
+  <Accordion title="Last Prompt Run shows 'Never' despite active schedule">
+    **Cause**: No runs have completed successfully yet.
+
+    **Common scenarios**:
+    - Just created schedule (wait for first execution)
+    - All previous runs failed
+    - Database migration reset timestamps
+
+    **Solution**: Manually trigger a run by clicking Save Schedule again.
+  </Accordion>
+
+  <Accordion title="Immediate run on schedule save fails">
+    **Error message**: "Schedule saved, but immediate run failed. It will run on the next cron cycle."
+
+    **Non-blocking**: The schedule is saved and future runs will work.
+
+    **Cause**: Worker agents may be:
+    - Temporarily down
+    - Processing too many jobs (queue backlog)
+    - Rate-limited by AI provider APIs
+
+    **Solution**: Wait 5-10 minutes and check the Dashboard. If data doesn't appear, manually trigger another run.
+  </Accordion>
+</AccordionGroup>
+
+## Advanced: Custom Cron Expressions
+
+<Warning>
+  OneGlance UI only supports the four predefined schedules. Custom cron expressions require direct database access (self-hosted deployments only).
+</Warning>
+
+For self-hosted users, you can manually insert custom cron schedules:
+
+```sql
+-- Example: Run every weekday at 8 AM UTC
+SELECT cron.schedule(
+  'auto_run_prompts_{workspaceId}',
+  '0 8 * * 1-5',
+  $$
+    SELECT http_post(
+      current_setting('app.api_base_url') || '/api/trpc/internal.runPrompts?batch=1',
+      jsonb_build_object(
+        '0',
+        jsonb_build_object(
+          'json',
+          jsonb_build_object(
+            'workspaceId', '{workspaceId}',
+            'userId', '{userId}'
+          )
+        )
+      ),
+      jsonb_build_object(
+        'Authorization', 'Bearer ' || current_setting('app.cron_secret'),
+        'Content-Type', 'application/json'
+      )
+    );
+  $$
+);
+```
+
+**Cron syntax reference**:
+```
+*    *    *    *    *
+┬    ┬    ┬    ┬    ┬
+│    │    │    │    │
+│    │    │    │    └─── Day of Week (0-7, Sun=0 or 7)
+│    │    │    └──────── Month (1-12)
+│    │    └───────────── Day of Month (1-31)
+│    └────────────────── Hour (0-23)
+└─────────────────────── Minute (0-59)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Interpreting Metrics" icon="chart-line" href="/guides/interpreting-metrics">
+    Analyze trends from scheduled runs to measure AI visibility changes
+  </Card>
+
+  <Card title="Managing Prompts" icon="messages" href="/guides/managing-prompts">
+    Optimize your prompt set based on scheduled run insights
+  </Card>
+
+  <Card title="Team Collaboration" icon="users" href="/guides/team-collaboration">
+    Share schedule settings and coordinate run timing with teammates
+  </Card>
+
+  <Card title="API Reference" icon="code" href="/api-reference/scheduling">
+    Programmatically manage schedules via the OneGlance API
+  </Card>
+</CardGroup>
+
+## Related Concepts
+
+- [Setup Guide](/guides/setup) - Initial workspace configuration
+- [Local Setup](/development/local-setup) - Self-hosting and pg_cron setup
+- [Architecture Overview](/development/overview) - Job queue and worker systems

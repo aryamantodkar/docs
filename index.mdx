@@ -1,0 +1,207 @@
+---
+mode: custom
+---
+
+<div className="relative overflow-hidden bg-gradient-to-br from-[#4F46E5] via-[#6366F1] to-[#818CF8] dark:from-[#3730A3] dark:via-[#4F46E5] dark:to-[#6366F1] py-20">
+  <div className="absolute inset-0 bg-black/10 dark:bg-black/20"></div>
+  <div className="relative max-w-6xl mx-auto px-6 lg:px-8">
+    <div className="grid lg:grid-cols-12 gap-8 items-center">
+      <div className="lg:col-span-7">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6">
+          Track Your Brand Across AI Providers
+        </h1>
+        <p className="text-lg sm:text-xl text-white/90 max-w-2xl mb-8">
+          Monitor how ChatGPT, Claude, Perplexity, Gemini, and Google AI Overview mention your brand with automated prompt testing and visibility analytics.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a
+            href="/quickstart"
+            className="inline-flex items-center px-6 py-3 rounded-lg bg-white text-[#4F46E5] font-semibold hover:bg-gray-100 transition-colors"
+          >
+            Get Started
+          </a>
+          <a
+            href="/introduction"
+            className="inline-flex items-center px-6 py-3 rounded-lg border border-white/30 bg-white/10 text-white font-semibold hover:bg-white/20 transition-colors"
+          >
+            Learn More
+          </a>
+        </div>
+      </div>
+      <div className="lg:col-span-5 hidden lg:block">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-[#818CF8] to-[#C7D2FE] rounded-2xl blur-3xl opacity-50"></div>
+          <div className="relative bg-white/10 dark:bg-white/5 backdrop-blur-xl border border-white/20 rounded-2xl p-8">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold">✓</div>
+                <span className="text-white font-medium">Multi-provider monitoring</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold">✓</div>
+                <span className="text-white font-medium">Automated browser testing</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold">✓</div>
+                <span className="text-white font-medium">Sentiment analysis</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold">✓</div>
+                <span className="text-white font-medium">Team collaboration</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Get started in minutes</h2>
+    <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+      Set up OneGlanse and start monitoring your brand mentions across AI providers
+    </p>
+  </div>
+
+  <Steps>
+    <Step title="Create your workspace">
+      Sign up and create your first workspace. Configure which AI providers you want to monitor (ChatGPT, Claude, Perplexity, Gemini, or Google AI Overview).
+    </Step>
+    <Step title="Add your prompts">
+      Create prompts that represent how users might ask about your product or brand. These will be automatically tested across all enabled providers.
+      
+      ```json Example prompt
+      {
+        "prompt": "What are the best tools for monitoring AI mentions?",
+        "workspace_id": "your-workspace-id"
+      }
+      ```
+    </Step>
+    <Step title="Schedule automated runs">
+      Set up a cron schedule to run your prompts automatically. OneGlanse will execute them across all providers using real browser sessions.
+      
+      ```bash Cron schedule
+      0 */6 * * *  # Run every 6 hours
+      ```
+    </Step>
+    <Step title="Analyze the results">
+      View sentiment analysis, visibility metrics, and position tracking in your dashboard. Track how your brand mentions change over time across different AI providers.
+    </Step>
+  </Steps>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Explore by topic</h2>
+    <p className="text-lg text-gray-600 dark:text-gray-400">
+      Learn about the core concepts and features of OneGlanse
+    </p>
+  </div>
+
+  <CardGroup cols={3}>
+    <Card
+      title="Workspaces"
+      icon="briefcase"
+      href="/concepts/workspaces"
+    >
+      Organize your monitoring with team workspaces and role-based access control
+    </Card>
+    <Card
+      title="Prompts"
+      icon="message"
+      href="/concepts/prompts"
+    >
+      Create and manage prompts that test how AI providers mention your brand
+    </Card>
+    <Card
+      title="Providers"
+      icon="brain"
+      href="/concepts/providers"
+    >
+      Monitor ChatGPT, Claude, Perplexity, Gemini, and Google AI Overview
+    </Card>
+    <Card
+      title="Analysis"
+      icon="chart-line"
+      href="/concepts/analysis"
+    >
+      Track sentiment, visibility, and position metrics over time
+    </Card>
+    <Card
+      title="Scheduling"
+      icon="clock"
+      href="/guides/scheduling"
+    >
+      Automate prompt execution with flexible cron schedules
+    </Card>
+    <Card
+      title="Team Collaboration"
+      icon="users"
+      href="/guides/team-collaboration"
+    >
+      Invite team members and manage permissions
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Developer resources</h2>
+    <p className="text-lg text-gray-600 dark:text-gray-400">
+      Build with OneGlanse or contribute to the project
+    </p>
+  </div>
+
+  <CardGroup cols={2}>
+    <Card
+      title="Architecture Overview"
+      icon="sitemap"
+      href="/development/overview"
+    >
+      Understand the system architecture and how components work together
+    </Card>
+    <Card
+      title="Local Setup"
+      icon="laptop-code"
+      href="/development/local-setup"
+    >
+      Set up OneGlanse locally for development with Docker Compose
+    </Card>
+    <Card
+      title="API Reference"
+      icon="code"
+      href="/api/overview"
+    >
+      Explore the tRPC API for building integrations
+    </Card>
+    <Card
+      title="Contributing"
+      icon="code-branch"
+      href="/development/contributing"
+    >
+      Learn how to contribute to OneGlanse
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-20 mb-16 max-w-5xl mx-auto px-6">
+  <div className="relative overflow-hidden bg-gradient-to-br from-[#4F46E5] to-[#818CF8] dark:from-[#3730A3] dark:to-[#6366F1] rounded-2xl p-12 text-center">
+    <div className="absolute inset-0 bg-black/5 dark:bg-black/10"></div>
+    <div className="relative">
+      <h2 className="text-3xl font-bold text-white mb-4">
+        Ready to track your brand across AI?
+      </h2>
+      <p className="text-lg text-white/90 mb-8 max-w-2xl mx-auto">
+        Start monitoring how AI providers mention your brand with automated testing and real-time analytics.
+      </p>
+      <a
+        href="/quickstart"
+        className="inline-flex items-center px-8 py-4 rounded-lg bg-white text-[#4F46E5] font-semibold hover:bg-gray-100 transition-colors"
+      >
+        Get Started Now
+      </a>
+    </div>
+  </div>
+</div>

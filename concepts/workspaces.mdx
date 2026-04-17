@@ -1,0 +1,208 @@
+---
+title: Workspaces
+description: Organize your AI brand monitoring with team workspaces and role-based access control
+---
+
+## What is a workspace?
+
+A workspace is the top-level organizational unit in OneGlanse. Each workspace represents a brand or product you want to monitor across AI providers. Workspaces contain:
+
+- **Prompts** - Questions that test how AI providers mention your brand
+- **Provider configurations** - Which AI platforms to monitor (ChatGPT, Claude, Perplexity, Gemini, AI Overview)
+- **Team members** - Collaborators with different permission levels
+- **Monitoring schedules** - Automated prompt execution timing
+- **Analysis data** - Historical metrics and trends
+
+## Why workspaces matter
+
+Workspaces provide isolation and organization for tracking different brands or products. This architecture enables:
+
+**Multi-brand monitoring** - Track multiple brands from a single account by creating separate workspaces
+
+**Team collaboration** - Invite team members to specific workspaces with role-based permissions
+
+**Provider flexibility** - Configure different AI providers for each workspace based on your monitoring needs
+
+**Data isolation** - Keep prompt responses and analysis metrics separate between brands
+
+## How workspaces work
+
+### Workspace structure
+
+Each workspace is defined by these core properties:
+
+```typescript
+{
+  id: string;              // Unique identifier
+  name: string;            // Display name (e.g., "Acme Corp")
+  slug: string;            // URL-friendly identifier
+  domain: string;          // Brand domain to monitor (e.g., "acme.com")
+  tenantId: string;        // Organization identifier
+  schedule: string | null; // Cron expression for automated runs
+  enabledProviders: string[]; // Active AI providers
+  createdAt: Date;
+}
+```
+
+### Default providers
+
+When you create a workspace, OneGlanse automatically enables all supported providers:
+
+<CodeGroup>
+```typescript Default Configuration
+const DEFAULT_PROVIDERS = [
+  "chatgpt",      // ChatGPT from OpenAI
+  "claude",       // Claude from Anthropic
+  "perplexity",   // Perplexity AI search
+  "gemini",       // Google Gemini
+  "ai-overview"   // Google AI Overview in Search
+];
+```
+
+```json Workspace Example
+{
+  "id": "ws_abc123",
+  "name": "Acme Corp",
+  "slug": "acme-corp",
+  "domain": "acme.com",
+  "enabledProviders": '["chatgpt","claude","perplexity","gemini","ai-overview"]',
+  "schedule": "0 */6 * * *"
+}
+```
+</CodeGroup>
+
+You can customize which providers to monitor by editing the `enabledProviders` configuration. For example, if you only want to track ChatGPT and Perplexity:
+
+```json
+{
+  "enabledProviders": '["chatgpt","perplexity"]'
+}
+```
+
+### Workspace members
+
+Workspaces support team collaboration through a member system:
+
+```typescript
+interface WorkspaceMember {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  role: string;        // "member" or "admin"
+  createdAt: Date;
+  deletedAt: Date | null;
+}
+```
+
+**Member roles**:
+- **Admin** - Full access to workspace settings, prompts, and member management
+- **Member** - View analysis data and create prompts
+
+Members are uniquely identified by the combination of `workspaceId` and `userId`, ensuring each user can only have one active role per workspace.
+
+## Creating your first workspace
+
+<Steps>
+  <Step title="Define your brand">
+    Choose the brand or product you want to monitor. You'll need:
+    - Brand name (e.g., "Acme Corp")
+    - Primary domain (e.g., "acme.com")
+    - URL-friendly slug (e.g., "acme-corp")
+  </Step>
+  
+  <Step title="Select AI providers">
+    Decide which AI platforms to monitor. Start with all five providers to get comprehensive coverage:
+    - **ChatGPT** - Most popular conversational AI
+    - **Claude** - Anthropic's AI assistant
+    - **Perplexity** - AI-powered search engine
+    - **Gemini** - Google's multimodal AI
+    - **AI Overview** - Google Search's AI summaries
+  </Step>
+  
+  <Step title="Configure scheduling">
+    Set up automated monitoring with a cron schedule:
+    
+    ```bash
+    # Run every 6 hours
+    0 */6 * * *
+    
+    # Run daily at 9 AM
+    0 9 * * *
+    
+    # Run every Monday at 8 AM
+    0 8 * * 1
+    ```
+    
+    See the [Scheduling guide](/guides/scheduling) for more examples.
+  </Step>
+  
+  <Step title="Invite team members">
+    Add collaborators to your workspace and assign appropriate roles. See [Team Collaboration](/guides/team-collaboration) for details.
+  </Step>
+</Steps>
+
+## Workspace best practices
+
+<AccordionGroup>
+  <Accordion title="Use one workspace per brand">
+    Create separate workspaces for different brands or products to keep data isolated and organized. This makes it easier to:
+    - Track metrics independently
+    - Configure different monitoring schedules
+    - Manage team access per brand
+  </Accordion>
+  
+  <Accordion title="Set meaningful domains">
+    The workspace domain is used in brand analysis to identify your brand in AI responses. Use your primary website domain (e.g., "acme.com") rather than subdomains or campaign URLs.
+  </Accordion>
+  
+  <Accordion title="Start with all providers enabled">
+    Monitor all five AI providers initially to establish baseline metrics. You can disable specific providers later if they're not relevant to your audience.
+  </Accordion>
+  
+  <Accordion title="Choose appropriate schedules">
+    Balance monitoring frequency with resource usage:
+    - **High-frequency (every 6 hours)** - Active campaigns or competitive tracking
+    - **Medium-frequency (daily)** - Ongoing brand monitoring
+    - **Low-frequency (weekly)** - Baseline tracking or budget-conscious setups
+  </Accordion>
+</AccordionGroup>
+
+## Understanding workspace data
+
+All prompts, responses, and analysis data are scoped to the workspace level. This means:
+
+- **Prompts** created in a workspace only run for that workspace's brand domain
+- **Analysis results** compare your brand against competitors mentioned in responses
+- **Metrics** track how your specific brand performs across providers over time
+- **Sources** show which websites AI providers cite when mentioning your brand
+
+Each prompt execution generates data tagged with:
+
+```typescript
+{
+  workspace_id: string;  // Links to your workspace
+  user_id: string;       // User who created the prompt
+  prompt_id: string;     // Unique prompt identifier
+  model_provider: string; // Which AI provider responded
+  created_at: string;    // When the response was captured
+}
+```
+
+This structure enables powerful filtering and analysis across workspaces, providers, and time periods.
+
+## Related resources
+
+<CardGroup cols={2}>
+  <Card title="Managing Prompts" icon="message" href="/guides/managing-prompts">
+    Create and organize prompts for your workspace
+  </Card>
+  <Card title="Team Collaboration" icon="users" href="/guides/team-collaboration">
+    Invite members and manage workspace permissions
+  </Card>
+  <Card title="Scheduling" icon="clock" href="/guides/scheduling">
+    Configure automated monitoring schedules
+  </Card>
+  <Card title="Providers" icon="brain" href="/concepts/providers">
+    Learn about supported AI providers
+  </Card>
+</CardGroup>

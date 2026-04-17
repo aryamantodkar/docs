@@ -1,0 +1,493 @@
+---
+title: 'Managing Prompts'
+description: 'Best practices for creating, editing, and optimizing prompts to track brand visibility across AI providers'
+---
+
+## Overview
+
+Prompts are the questions OneGlance asks AI providers on your behalf. Effective prompt management directly impacts the quality and relevance of your brand visibility data.
+
+<Note>
+  Changes to prompts take effect on the **next scheduled run** or when you manually trigger a run. Editing prompts does not re-analyze existing responses.
+</Note>
+
+## Accessing the Prompts Page
+
+1. Navigate to **Prompts** from the sidebar
+2. Select your workspace from the dropdown (if you have multiple)
+3. The page displays all prompts with their performance metrics
+
+### Prompts Page Layout
+
+The prompts interface shows:
+
+```tsx
+// From apps/web/src/app/(auth)/prompts/page.tsx:755
+<Table>
+  <TableHeader>
+    <TableRow>
+      <TableHead>Prompt</TableHead>
+      <TableHead>GEO Score</TableHead>
+      <TableHead>Sentiment</TableHead>
+      <TableHead>Visibility</TableHead>
+      <TableHead>Position</TableHead>
+    </TableRow>
+  </TableHeader>
+  <TableBody>
+    {sortedPromptsWithMetrics.map(({ prompt, metrics }) => (
+      <TableRow onClick={() => setOpenPrompt(prompt)}>
+        <TableCell>{prompt.prompt}</TableCell>
+        <TableCell>{metrics?.geoScore}</TableCell>
+        <TableCell><SentimentMetricCell sentiment={metrics.sentiment} /></TableCell>
+        <TableCell>{metrics?.visibility}%</TableCell>
+        <TableCell><PositionMetricCell position={metrics.position} /></TableCell>
+      </TableRow>
+    ))}
+  </TableBody>
+</Table>
+```
+
+Click any prompt row to view individual AI provider responses.
+
+## Adding New Prompts
+
+<Steps>
+  <Step title="Click Add Prompt">
+    From the Prompts page, click **+ Add Prompt** in the top toolbar.
+  </Step>
+
+  <Step title="Enter Your Prompt">
+    Type or paste your prompt in the dialog textarea.
+
+    <Warning>
+      Prompts are case-sensitive and should be phrased exactly as a user would ask an AI assistant.
+    </Warning>
+
+    **Good examples**:
+    ```
+    What are the best CRM tools for sales teams under 50 people?
+    Which marketing automation platform has the best email deliverability?
+    Compare Salesforce, HubSpot, and Pipedrive for mid-market B2B companies
+    ```
+
+    **Avoid**:
+    ```
+    CRM tools (too vague)
+    [Brand Name] vs competitors (AI providers won't understand the placeholder)
+    best crm????? (poor grammar/formatting)
+    ```
+  </Step>
+
+  <Step title="Save Changes">
+    Click **Add** to stage the prompt, then click **Save Changes** to persist all prompt modifications.
+
+    <Tip>
+      You can add multiple prompts before saving. All changes batch together in a single save operation.
+    </Tip>
+  </Step>
+</Steps>
+
+## Editing Existing Prompts
+
+<Steps>
+  <Step title="Select the Prompt">
+    Click the checkbox next to the prompt you want to edit.
+  </Step>
+
+  <Step title="Click Edit">
+    The **Edit** button appears when exactly one prompt is selected.
+
+    ```tsx
+    // From apps/web/src/app/(auth)/prompts/page.tsx:530
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={selectedRows.size !== 1}
+      onClick={() => {
+        const idx = Array.from(selectedRows)[0];
+        setEditIndex(idx);
+        setEditPromptValue(promptData[idx]?.prompt ?? '');
+        setDialogOpen(true);
+      }}
+    >
+      <Pencil size={16} />
+      Edit
+    </Button>
+    ```
+  </Step>
+
+  <Step title="Modify and Save">
+    Update the prompt text in the dialog, then:
+    1. Click **Update** to stage the change
+    2. Click **Save Changes** to persist
+  </Step>
+</Steps>
+
+<Warning>
+  Editing a prompt does **not** re-analyze past responses. To see updated metrics, run a new analysis after saving.
+</Warning>
+
+## Deleting Prompts
+
+<Steps>
+  <Step title="Select Prompts">
+    Check one or more prompts to delete.
+  </Step>
+
+  <Step title="Click Delete">
+    The **Delete (N)** button shows the count of selected prompts.
+  </Step>
+
+  <Step title="Confirm and Save">
+    Prompts are removed from the table. Click **Save Changes** to finalize.
+
+    <Note>
+      Deleting a prompt removes it from future runs but preserves historical response data in the database.
+    </Note>
+  </Step>
+</Steps>
+
+## Viewing Prompt Responses
+
+Click any prompt row to open a detailed view of AI provider responses.
+
+### Response Details Modal
+
+For each AI provider response, you'll see:
+
+<Tabs>
+  <Tab title="Metrics">
+    - **GEO Score**: Overall visibility score (0-100)
+    - **Sentiment**: How positively/negatively the brand was mentioned
+    - **Visibility**: Prominence percentage
+    - **Position**: Rank in recommendation list (if applicable)
+
+    Example from `apps/web/src/app/(auth)/prompts/page.tsx:992`:
+    ```tsx
+    {record.is_analysed && record.brand_analysis && (
+      <div>
+        <span>GEO Score: {record.brand_analysis.geoScore.overall}</span>
+        <SentimentMetricCell sentiment={record.brand_analysis.sentiment.score} />
+        <span>Visibility: {record.brand_analysis.presence.visibility}%</span>
+        <PositionMetricCell position={record.brand_analysis.position.rankPosition} />
+      </div>
+    )}
+    ```
+  </Tab>
+
+  <Tab title="Response Text">
+    The full AI-generated response with markdown formatting.
+
+    Click **View full response** to expand lengthy responses:
+
+    ```tsx
+    // From apps/web/src/app/(auth)/prompts/page.tsx:1077
+    <div
+      className={isExpanded ? "" : "line-clamp-3"}
+      dangerouslySetInnerHTML={{ __html: formatMarkdown(record.response) }}
+    />
+    ```
+  </Tab>
+
+  <Tab title="Sources">
+    Citation links the AI provider referenced:
+
+    - **URL**: Source link
+    - **Title**: Page/article title
+    - **Cited Text**: Excerpt quoted by the AI
+
+    ```tsx
+    // From apps/web/src/app/(auth)/prompts/page.tsx:1094
+    <SourcesHoverLinks items={record.sources} />
+    ```
+  </Tab>
+</Tabs>
+
+### Filtering Responses
+
+Use the filters in the modal to narrow results:
+
+- **Model Filter**: View responses from a specific AI provider (ChatGPT, Claude, etc.)
+- **Time Range**: Filter by when the prompt was run (7d, 14d, 30d, all)
+
+## Prompt Strategy Best Practices
+
+### 1. Use Buyer-Intent Language
+
+Frame prompts as real questions buyers ask during research.
+
+<Accordion title="Example: Software Buyer Journey">
+  **Awareness Stage**:
+  - "What tools help with sales pipeline management?"
+  - "How do modern CRMs compare to spreadsheets?"
+
+  **Consideration Stage**:
+  - "Compare Salesforce vs HubSpot for mid-market teams"
+  - "Which CRM has the best Slack integration?"
+
+  **Decision Stage**:
+  - "Is [Competitor] worth the price for a 10-person sales team?"
+  - "What are the main differences between [Brand A] and [Brand B] pricing?"
+</Accordion>
+
+### 2. Cover Multiple Use Cases
+
+Different buyer segments may trigger different AI responses.
+
+```
+✅ Good coverage:
+- "Best CRM for startups under 10 employees"
+- "Best CRM for enterprise teams with complex workflows"
+- "Best CRM for real estate agencies"
+- "Best CRM for B2B SaaS companies"
+
+❌ Poor coverage:
+- "Best CRM" (only one generic prompt)
+```
+
+### 3. Test Competitive Positioning
+
+Include prompts that mention competitors directly.
+
+```
+Comparative prompts:
+- "Compare [Your Brand] vs [Top Competitor] for [use case]"
+- "Why choose [Competitor A] over [Competitor B]?"
+- "[Competitor] alternatives for [specific need]"
+
+Alternative prompts:
+- "Alternatives to [Top Competitor]"
+- "Tools like [Category Leader] but cheaper"
+- "Open-source alternatives to [Commercial Product]"
+```
+
+<Tip>
+  If your brand appears when users ask about competitors, that's strong AI visibility. Track these prompts closely.
+</Tip>
+
+### 4. Balance Specificity
+
+Mix broad and narrow prompts.
+
+| Prompt Type | Example | Purpose |
+|-------------|---------|----------|
+| **Broad** | "What are the best project management tools?" | Measures category-level visibility |
+| **Feature-Specific** | "Which project management tool has the best Gantt charts?" | Tests feature differentiation |
+| **Niche** | "Project management tools for remote creative agencies" | Tracks audience-specific positioning |
+| **Branded** | "Is Asana good for marketing teams?" | Measures direct brand awareness |
+
+### 5. Refresh Prompts Quarterly
+
+AI training data evolves. Update prompts to reflect:
+- New product launches (yours and competitors)
+- Emerging buyer questions (check support/sales logs)
+- Category trends ("AI-powered CRM" vs "CRM with AI")
+
+## Interpreting Prompt Performance
+
+### Sorting and Filtering
+
+The prompts table supports sorting by:
+
+<Tabs>
+  <Tab title="GEO Score">
+    **Use case**: Identify which prompts generate the strongest brand visibility.
+
+    - **High GEO (70+)**: Your brand is well-positioned for this query type
+    - **Medium GEO (40-69)**: Brand appears but not prominently
+    - **Low GEO (&lt;40)**: Brand rarely mentioned or poorly positioned
+
+    **Action**: Invest in content/SEO for low-performing prompt topics.
+  </Tab>
+
+  <Tab title="Sentiment">
+    **Use case**: Find prompts where your brand receives positive/negative mentions.
+
+    - **Positive (70+)**: Favorable recommendations
+    - **Neutral (40-69)**: Factual mentions without strong opinion
+    - **Negative (&lt;40)**: Critical mentions or warnings
+
+    **Action**: Investigate negative sentiment prompts—what concerns are AI providers surfacing?
+  </Tab>
+
+  <Tab title="Visibility">
+    **Use case**: Measure how prominently your brand appears in responses.
+
+    - **High (70+)**: Brand discussed extensively
+    - **Moderate (30-69)**: Brand mentioned but not focal
+    - **Low (&lt;30)**: Passing mention or absent
+
+    **Action**: Low visibility despite presence suggests your brand lacks differentiation in AI responses.
+  </Tab>
+
+  <Tab title="Position">
+    **Use case**: Track ranking when AI providers list recommendations.
+
+    - **#1-3**: Top recommendations
+    - **#4-6**: Secondary alternatives
+    - **#7+**: Long-tail mentions
+    - **N/A**: Not ranked (prose mention)
+
+    **Action**: If consistently ranked #4+, analyze what competitors rank higher and why.
+  </Tab>
+</Tabs>
+
+### Status Indicators
+
+Prompts may show different status messages:
+
+<AccordionGroup>
+  <Accordion title="No responses yet">
+    The prompt exists but hasn't been run. This appears when:
+    - You just added the prompt
+    - No scheduled runs have executed since adding it
+
+    **Solution**: Manually trigger a run or wait for the next scheduled execution.
+  </Accordion>
+
+  <Accordion title="Analysis in progress...">
+    AI providers returned responses, but analysis hasn't completed.
+
+    From `apps/web/src/app/(auth)/prompts/page.tsx:863`:
+    ```tsx
+    {reason === 'unanalyzed' ? "Analysis in progress..." : ...}
+    ```
+
+    **Typical duration**: 1-3 minutes per response.
+
+    **Solution**: Refresh the page or wait. Analysis runs automatically after responses are collected.
+  </Accordion>
+
+  <Accordion title="Brand not mentioned in this prompt">
+    AI providers responded, but your brand didn't appear in any answers.
+
+    ```tsx
+    {reason === 'brand-not-mentioned' ? "Brand not mentioned in this prompt" : ...}
+    ```
+
+    **Common causes**:
+    - Prompt topic unrelated to your category
+    - Competitors dominating AI training data
+    - Brand name/domain mismatch (AI uses different name)
+
+    **Solution**: Review the responses to understand why. Consider:
+    - Rephrasing the prompt
+    - Creating more category-specific content
+    - Checking if AI providers recognize your brand name
+  </Accordion>
+</AccordionGroup>
+
+## Exporting Prompt Data
+
+Export prompt performance for external analysis.
+
+<Steps>
+  <Step title="Apply Filters (Optional)">
+    Use model and time filters to narrow the export scope.
+  </Step>
+
+  <Step title="Choose Export Format">
+    Click the **Export** dropdown and select:
+
+    - **JSON**: Structured data with full nested objects
+    - **CSV**: Flat data for spreadsheet analysis
+  </Step>
+
+  <Step title="Review Export Contents">
+    Both formats include:
+
+    ```typescript
+    // From apps/web/src/app/(auth)/prompts/page.tsx:656
+    const exportData = {
+      generatedAt: new Date().toISOString(),
+      workspaceId,
+      report: {
+        title: 'Prompt Performance Export',
+        version: '2.0',
+        filters: { modelFilter, timeFilter, sortBy, sortDirection },
+      },
+      overview: {
+        totalPrompts: sortedPromptsWithMetrics.length,
+        analyzedPrompts: analyzedRows.length,
+        unanalyzedPrompts: sortedPromptsWithMetrics.length - analyzedRows.length,
+      },
+      detailedData: {
+        rows: promptRows.map(({ prompt, metrics, modelProvider }) => ({
+          promptId: prompt.id,
+          prompt: prompt.prompt,
+          modelProvider,
+          geoScore: metrics?.geoScore,
+          sentiment: metrics?.sentiment,
+          visibility: metrics?.visibility,
+          position: metrics?.position,
+          responses: [...] // Full response objects
+        }))
+      }
+    };
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Save Changes button stays disabled">
+    **Cause**: No modifications detected or you're currently editing a prompt.
+
+    **Solution**: 
+    - Ensure you've made actual changes (text modifications, additions, deletions)
+    - Complete or cancel any open edit dialog
+  </Accordion>
+
+  <Accordion title="Metrics don't update after editing prompt">
+    **Expected behavior**: Editing a prompt doesn't retroactively change analysis.
+
+    **Solution**: After saving edits, trigger a new run:
+    1. Go to Schedule page
+    2. Click **Save Schedule** (triggers immediate run)
+    3. Wait for completion, then check updated metrics
+  </Accordion>
+
+  <Accordion title="Some AI providers show 'no data' for specific prompts">
+    **Possible causes**:
+    - Provider failed for that specific prompt
+    - Provider disabled in Settings
+    - Rate limiting or API errors
+
+    **Solution**: Check the prompt response detail modal:
+    - If provider is listed but shows error → temporary API issue, retry run
+    - If provider missing → verify it's enabled in Settings
+  </Accordion>
+
+  <Accordion title="Can't delete last prompt">
+    **Requirement**: Workspaces must have at least one prompt.
+
+    **Solution**: Add a new prompt before deleting the last one, or accept that you need at least one active prompt.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Scheduling" icon="clock" href="/guides/scheduling">
+    Automate prompt runs to track visibility trends over time
+  </Card>
+
+  <Card title="Interpreting Metrics" icon="chart-line" href="/guides/interpreting-metrics">
+    Understand GEO scores, sentiment, and competitive positioning in depth
+  </Card>
+
+  <Card title="Team Collaboration" icon="users" href="/guides/team-collaboration">
+    Share prompt strategy and results with your team
+  </Card>
+
+  <Card title="API Reference" icon="code" href="/api-reference/prompts">
+    Programmatically manage prompts via the OneGlance API
+  </Card>
+</CardGroup>
+
+## Related Concepts
+
+- [Setup Guide](/guides/setup) - Creating your first workspace and prompts
+- [Analysis Concepts](/concepts/analysis) - How OneGlance analyzes AI responses
+- [Interpreting Metrics](/guides/interpreting-metrics) - Understanding aggregate metrics

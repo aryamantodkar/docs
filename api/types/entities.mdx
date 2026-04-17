@@ -1,0 +1,207 @@
+---
+title: "Entity Types"
+description: "TypeScript types for business entities like competitors and brands"
+---
+
+## Overview
+
+The entities types module defines data structures for business entities within the OneGlance system. These types represent competitors, brands, and other organizational entities tracked in the platform.
+
+## CompetitorInput
+
+Input structure for defining a competitor brand.
+
+```typescript
+type CompetitorInput = {
+  name: string;
+  slug: string;
+  domain: string;
+};
+```
+
+<ResponseField name="name" type="string" required>
+  The full name of the competitor brand (e.g., "Acme Analytics")
+</ResponseField>
+
+<ResponseField name="slug" type="string" required>
+  URL-friendly identifier for the competitor (e.g., "acme-analytics")
+</ResponseField>
+
+<ResponseField name="domain" type="string" required>
+  The competitor's primary domain name (e.g., "acme.com")
+</ResponseField>
+
+### Usage
+
+This type is used when adding competitors to track or analyze:
+
+```typescript
+const competitor: CompetitorInput = {
+  name: "Acme Analytics",
+  slug: "acme-analytics",
+  domain: "acme.com"
+};
+```
+
+### Common Use Cases
+
+#### Adding Competitors to Track
+
+```typescript
+const competitors: CompetitorInput[] = [
+  {
+    name: "DataViz Pro",
+    slug: "dataviz-pro",
+    domain: "dataviz.io"
+  },
+  {
+    name: "MetricsHub",
+    slug: "metricshub",
+    domain: "metricshub.com"
+  },
+  {
+    name: "AnalyticsAI",
+    slug: "analytics-ai",
+    domain: "analyticsai.net"
+  }
+];
+```
+
+#### Competitor Configuration
+
+```typescript
+function addCompetitor(input: CompetitorInput) {
+  // Validate domain format
+  if (!isValidDomain(input.domain)) {
+    throw new Error(`Invalid domain: ${input.domain}`);
+  }
+  
+  // Ensure slug is URL-safe
+  if (!/^[a-z0-9-]+$/.test(input.slug)) {
+    throw new Error(`Invalid slug: ${input.slug}`);
+  }
+  
+  // Store competitor
+  return saveCompetitor(input);
+}
+```
+
+#### Bulk Import
+
+```typescript
+interface CompetitorImportData {
+  competitors: CompetitorInput[];
+}
+
+const importData: CompetitorImportData = {
+  competitors: [
+    { name: "Competitor 1", slug: "competitor-1", domain: "competitor1.com" },
+    { name: "Competitor 2", slug: "competitor-2", domain: "competitor2.com" }
+  ]
+};
+```
+
+### Field Guidelines
+
+#### Name
+The brand's official name as it appears in marketing materials:
+- Use proper capitalization
+- Include full legal entity name if commonly used
+- Example: "Salesforce" not "salesforce"
+
+#### Slug
+A URL-safe identifier:
+- Lowercase only
+- Use hyphens for spaces
+- No special characters except hyphens
+- Should be unique across all competitors
+- Examples: `"google-analytics"`, `"adobe-analytics"`, `"mixpanel"`
+
+#### Domain
+The primary web domain:
+- Exclude protocol (http://, https://)
+- Exclude www prefix (use root domain)
+- Include TLD (.com, .io, etc.)
+- Examples: `"google.com"`, `"adobe.com"`, `"mixpanel.com"`
+
+### Related Types
+
+Competitor data appears in analysis results:
+
+- **BrandAnalysisResult.competitors** - Detailed competitor analysis including visibility, sentiment, and rankings. See [BrandAnalysisResult](/api/types/analysis#brandanalysisresult).
+
+### Integration Points
+
+The `CompetitorInput` type integrates with:
+
+1. **Analysis Engine** - Competitor domains are tracked across AI responses to build competitive landscape insights
+2. **Dashboard** - Competitor comparison views show how your brand performs against tracked competitors
+3. **Sources Analysis** - Identifies which competitors are being cited in AI responses
+4. **Metrics Calculation** - Relative positioning and win/loss analysis against competitors
+
+### Validation
+
+When implementing competitor input, ensure:
+
+```typescript
+function validateCompetitorInput(input: CompetitorInput): boolean {
+  // Name should be non-empty
+  if (!input.name || input.name.trim().length === 0) {
+    return false;
+  }
+  
+  // Slug should be URL-safe
+  const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+  if (!slugPattern.test(input.slug)) {
+    return false;
+  }
+  
+  // Domain should be valid format
+  const domainPattern = /^[a-z0-9]+([-.]?[a-z0-9]+)*\.[a-z]{2,}$/i;
+  if (!domainPattern.test(input.domain)) {
+    return false;
+  }
+  
+  return true;
+}
+```
+
+### Example API Response
+
+When fetching competitors from an API:
+
+```typescript
+interface GetCompetitorsResponse {
+  competitors: CompetitorInput[];
+  total: number;
+}
+
+const response: GetCompetitorsResponse = {
+  competitors: [
+    {
+      name: "Google Analytics",
+      slug: "google-analytics",
+      domain: "analytics.google.com"
+    },
+    {
+      name: "Mixpanel",
+      slug: "mixpanel",
+      domain: "mixpanel.com"
+    }
+  ],
+  total: 2
+};
+```
+
+---
+
+## Future Entity Types
+
+The entities module is designed to expand with additional business entity types:
+
+- **BrandInput** - Primary brand configuration
+- **WorkspaceEntity** - Workspace details and settings
+- **TeamMember** - Team member profiles and roles
+- **IntegrationEntity** - Third-party integration configurations
+
+Check back for updates as the OneGlance platform evolves.

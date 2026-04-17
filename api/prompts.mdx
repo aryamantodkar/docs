@@ -1,0 +1,251 @@
+---
+title: 'Prompts API'
+description: 'Store and retrieve prompts for brand mention analysis'
+---
+
+## Overview
+
+The Prompts API allows you to store prompts that users have submitted to AI providers and retrieve them for analysis. Prompts are the foundation of OneGlance's brand tracking capabilities.
+
+## Endpoints
+
+### store
+
+Store one or more prompts for a workspace. These prompts will be analyzed for brand mentions.
+
+**Type**: Mutation (Authorized Workspace)
+
+**Rate Limit**: 20 requests per minute
+
+<ParamField path="workspaceId" type="string" required>
+  ID of the workspace to store prompts for
+</ParamField>
+
+<ParamField path="prompts" type="array" required>
+  Array of prompt strings to store. Each prompt must be 1-500 characters. Minimum 1 prompt, maximum 100 prompts per request.
+</ParamField>
+
+<ResponseField name="stored" type="number">
+  Number of prompts successfully stored
+</ResponseField>
+
+<ResponseField name="prompts" type="array">
+  Array of stored prompt objects
+</ResponseField>
+
+<CodeGroup>
+```typescript Request
+const result = await trpc.prompt.store.mutate({
+  workspaceId: "ws_abc123",
+  prompts: [
+    "What is the best project management tool for startups?",
+    "Compare Asana vs Monday for team collaboration",
+    "How does Notion handle real-time collaboration?"
+  ]
+});
+```
+
+```typescript Response
+{
+  stored: 3,
+  prompts: [
+    {
+      id: "prompt_123",
+      workspaceId: "ws_abc123",
+      userId: "user_123",
+      content: "What is the best project management tool for startups?",
+      source: "user",
+      createdAt: Date
+    },
+    {
+      id: "prompt_124",
+      workspaceId: "ws_abc123",
+      userId: "user_123",
+      content: "Compare Asana vs Monday for team collaboration",
+      source: "user",
+      createdAt: Date
+    },
+    {
+      id: "prompt_125",
+      workspaceId: "ws_abc123",
+      userId: "user_123",
+      content: "How does Notion handle real-time collaboration?",
+      source: "user",
+      createdAt: Date
+    }
+  ]
+}
+```
+</CodeGroup>
+
+### Validation Rules
+
+- Minimum 1 prompt per request
+- Maximum 100 prompts per request
+- Each prompt must be between 1-500 characters
+- All prompts must be non-empty strings
+
+---
+
+### fetchPromptSources
+
+Retrieve aggregated statistics about prompt sources for the workspace.
+
+**Type**: Query (Authorized Workspace)
+
+<ParamField path="workspaceId" type="string" required>
+  ID of the workspace
+</ParamField>
+
+<ResponseField name="sources" type="array">
+  Array of prompt sources with counts and metadata
+</ResponseField>
+
+<CodeGroup>
+```typescript Request
+const sources = await trpc.prompt.fetchPromptSources.query({
+  workspaceId: "ws_abc123"
+});
+```
+
+```typescript Response
+[
+  {
+    source: "user",
+    count: 45,
+    lastSubmitted: Date
+  },
+  {
+    source: "agent",
+    count: 320,
+    lastSubmitted: Date
+  }
+]
+```
+</CodeGroup>
+
+---
+
+### fetchUserPrompts
+
+Retrieve all user-submitted prompts for the workspace.
+
+**Type**: Query (Authorized Workspace)
+
+<ParamField path="workspaceId" type="string" required>
+  ID of the workspace
+</ParamField>
+
+<ResponseField name="prompts" type="array">
+  Array of prompt objects submitted by users (excludes agent-collected prompts)
+</ResponseField>
+
+<CodeGroup>
+```typescript Request
+const prompts = await trpc.prompt.fetchUserPrompts.query({
+  workspaceId: "ws_abc123"
+});
+```
+
+```typescript Response
+[
+  {
+    id: "prompt_123",
+    workspaceId: "ws_abc123",
+    userId: "user_123",
+    content: "What is the best project management tool for startups?",
+    source: "user",
+    analyzed: false,
+    createdAt: Date,
+    updatedAt: Date
+  },
+  {
+    id: "prompt_124",
+    workspaceId: "ws_abc123",
+    userId: "user_456",
+    content: "Compare Asana vs Monday for team collaboration",
+    source: "user",
+    analyzed: true,
+    createdAt: Date,
+    updatedAt: Date
+  }
+]
+```
+</CodeGroup>
+
+---
+
+## Prompt Sources
+
+Prompts in OneGlance can come from two sources:
+
+- **user**: Manually submitted by workspace members
+- **agent**: Automatically collected by OneGlance agents from AI provider responses
+
+## Use Cases
+
+### Manual Prompt Submission
+
+Use the `store` endpoint when you want to track specific prompts that users have encountered:
+
+```typescript
+// User submits a prompt they received from ChatGPT
+await trpc.prompt.store.mutate({
+  workspaceId: currentWorkspaceId,
+  prompts: [
+    "Best CRM software for small businesses in 2026"
+  ]
+});
+```
+
+### Batch Import
+
+Import multiple prompts at once (up to 100 per request):
+
+```typescript
+const promptsToImport = [
+  "What are the top email marketing platforms?",
+  "Compare Mailchimp vs ConvertKit for creators",
+  "How to set up automated email campaigns"
+  // ... up to 100 prompts
+];
+
+await trpc.prompt.store.mutate({
+  workspaceId: currentWorkspaceId,
+  prompts: promptsToImport
+});
+```
+
+### Analyzing Stored Prompts
+
+After storing prompts, use the Analysis API to extract brand mentions:
+
+```typescript
+// Store prompts
+await trpc.prompt.store.mutate({
+  workspaceId: currentWorkspaceId,
+  prompts: ["What's the best alternative to Salesforce?"]
+});
+
+// Analyze them
+const analysis = await trpc.analysis.analyzeMetrics.mutate({
+  workspaceId: currentWorkspaceId,
+  analyzeAll: false // Only analyze new prompts
+});
+```
+
+---
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Analysis API" icon="chart-line" href="/api/analysis">
+    Analyze prompts for brand mentions
+  </Card>
+  <Card title="Agent API" icon="robot" href="/api/agent">
+    Automate prompt collection
+  </Card>
+  <Card title="Workspace API" icon="building" href="/api/workspace">
+    Manage workspace settings
+  </Card>
+</CardGroup>

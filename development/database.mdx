@@ -1,0 +1,725 @@
+---
+title: Database Architecture
+description: Technical documentation for OneGlanse database schemas and migrations
+---
+
+## Overview
+
+OneGlanse uses a **dual-database architecture**:
+
+- **PostgreSQL** - Transactional data (users, workspaces, auth)
+- **ClickHouse** - Analytics data (prompts, responses, sources)
+
+Both databases are accessed via type-safe ORMs:
+
+- PostgreSQL: **Drizzle ORM**
+- ClickHouse: **@clickhouse/client**
+
+## Database Clients
+
+### PostgreSQL Client
+
+Drizzle ORM provides type-safe queries:
+
+```typescript packages/db/src/clients/postgres.ts
+import { drizzle } from "drizzle-orm/postgres-js";
+import { Pool } from "pg";
+import postgres from "postgres";
+import * as schema from "../schema/index.js";
+
+const databaseUrl = getRequiredDatabaseUrl();
+const conn = postgres(databaseUrl);
+
+export const db = drizzle(conn, { schema });
+
+// Raw pg Pool for pg_cron SQL calls
+export const pool = new Pool({
+  connectionString: databaseUrl,
+  max: 5,
+});
+```
+
+**Reference**: `packages/db/src/clients/postgres.ts:1-34`
+
+**Usage:**
+
+```typescript
+import { db, schema } from "@oneglanse/db";
+import { eq } from "drizzle-orm";
+
+// Type-safe query
+const workspace = await db.query.workspaces.findFirst({
+  where: eq(schema.workspaces.id, workspaceId),
+});
+
+// Insert
+await db.insert(schema.workspaces).values({
+  id: "workspace_123",
+  name: "Acme Corp",
+  slug: "acme-corp",
+  domain: "acme.com",
+  tenantId: "org_456",
+});
+```
+
+### ClickHouse Client
+
+ClickHouse client for analytics queries:
+
+```typescript packages/db/src/clients/clickhouse.ts
+import { createClient } from "@clickhouse/client";
+import { clickhouseConfig } from "../config/clickhouse.js";
+
+export const clickhouse = createClient(clickhouseConfig);
+```
+
+**Reference**: `packages/db/src/clients/clickhouse.ts:1-4`
+
+**Configuration:**
+
+```typescript packages/db/src/config/clickhouse.ts
+export const clickhouseConfig = {
+  url: env.CLICKHOUSE_URL ?? "http://clickhouse:8123",
+  username: env.CLICKHOUSE_USER,
+  password: env.CLICKHOUSE_PASSWORD,
+  database: env.CLICKHOUSE_DB,
+};
+```
+
+**Reference**: `packages/db/src/config/clickhouse.ts:15-20`
+
+**Usage:**
+
+```typescript
+import { clickhouse } from "@oneglanse/db";
+
+// Query
+const result = await clickhouse.query({
+  query: `
+    SELECT *
+    FROM analytics.prompt_responses
+    WHERE workspace_id = {workspaceId:String}
+    ORDER BY created_at DESC
+    LIMIT 100
+  `,
+  query_params: { workspaceId: "workspace_123" },
+  format: "JSONEachRow",
+});
+
+const rows = await result.json();
+
+// Insert
+await clickhouse.insert({
+  table: "analytics.user_prompts",
+  values: [
+    {
+      id: "prompt_123",
+      user_id: "user_456",
+      workspace_id: "workspace_789",
+      prompt: "Best CRM for startups",
+      created_at: new Date(),
+    },
+  ],
+  format: "JSONEachRow",
+});
+```
+
+## PostgreSQL Schema
+
+### Workspaces Table
+
+Stores workspace/brand information:
+
+```typescript packages/db/src/schema/workspace.ts
+import { pgTable, varchar, text, timestamp } from "drizzle-orm/pg-core";
+
+const DEFAULT_PROVIDERS_JSON =
+  '["chatgpt","claude","perplexity","gemini","ai-overview"]';
+
+export const workspaces = pgTable("workspaces", {
+  id: varchar("id", { length: 256 }).primaryKey(),
+  name: varchar("name", { length: 256 }).notNull(),
+  slug: varchar("slug", { length: 256 }).notNull(),
+  domain: varchar("domain", { length: 256 }).notNull(),
+  tenantId: varchar("tenant_id", { length: 256 }).notNull(),
+  schedule: varchar("schedule", { length: 64 }),
+  enabledProviders: text("enabled_providers")
+    .default(DEFAULT_PROVIDERS_JSON)
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+});
+```
+
+**Reference**: `packages/db/src/schema/workspace.ts:18-30`
+
+**Key Fields:**
+
+- `id`: Unique workspace ID (e.g., `workspace_abc123`)
+- `name`: Display name (e.g., "Acme Corp")
+- `domain`: Brand domain (e.g., "acme.com")
+- `tenantId`: Organization ID (Better Auth)
+- `schedule`: Cron expression for scheduled runs
+- `enabledProviders`: JSON array of enabled AI providers
+- `deletedAt`: Soft delete timestamp
+
+### Workspace Members Table
+
+Links users to workspaces:
+
+```typescript packages/db/src/schema/workspace.ts
+export const workspaceMembers = pgTable(
+  "workspace_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    
+    role: text("role").notNull().default("member"),
+    
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (table) => ({
+    uniqueActiveMember: uniqueIndex("workspace_members_unique_active")
+      .on(table.workspaceId, table.userId)
+      .where(sql`${table.deletedAt} IS NULL`),
+    
+    workspaceIdx: index("workspace_members_workspace_id_idx").on(
+      table.workspaceId
+    ),
+    userIdx: index("workspace_members_user_id_idx").on(table.userId),
+  })
+);
+```
+
+**Reference**: `packages/db/src/schema/workspace.ts:32-60`
+
+### Authentication Tables
+
+Better Auth manages these tables:
+
+```typescript packages/db/src/schema/auth.ts
+- user                  // Users
+- session               // Sessions
+- account               // OAuth accounts
+- verification          // Email verification
+- organization          // Organizations (tenants)
+- member                // Organization members
+- invitation            // Workspace invitations
+```
+
+## ClickHouse Schema
+
+### User Prompts Table
+
+Stores unique prompts per workspace:
+
+```sql packages/db/clickhouse-init/schema.sql
+CREATE TABLE IF NOT EXISTS analytics.user_prompts (
+    id String,
+    user_id String,
+    workspace_id String,
+    prompt String,
+    created_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree()
+PRIMARY KEY (workspace_id, prompt)
+ORDER BY (workspace_id, prompt, created_at);
+```
+
+**Reference**: `packages/db/clickhouse-init/schema.sql:3-11`
+
+**Purpose:**
+
+- Stores unique prompts (deduplicated by `workspace_id` + `prompt`)
+- Uses `ReplacingMergeTree` for automatic deduplication
+- Efficient lookups by workspace
+
+### Prompt Responses Table
+
+Stores AI responses and sources:
+
+```sql packages/db/clickhouse-init/schema.sql
+CREATE TABLE IF NOT EXISTS analytics.prompt_responses (
+    id String,
+    prompt_id String,
+    prompt String,
+    user_id String,
+    workspace_id String,
+    model String,
+    model_provider LowCardinality(String),
+    response String,
+    sources Array(Tuple(
+        title String,
+        cited_text String,
+        url String,
+        domain Nullable(String),
+        favicon Nullable(String)
+    )),
+    is_analysed Bool DEFAULT false,
+    prompt_run_at DateTime,
+    created_at DateTime DEFAULT now()
+)
+ENGINE = ReplacingMergeTree()
+PARTITION BY toYYYYMM(prompt_run_at)
+ORDER BY (workspace_id, prompt_run_at, model_provider, prompt_id);
+```
+
+**Reference**: `packages/db/clickhouse-init/schema.sql:13-35`
+
+**Key Fields:**
+
+- `id`: Unique response ID
+- `prompt_id`: Links to `user_prompts.id`
+- `prompt`: Denormalized prompt text
+- `model`: Specific model (e.g., "gpt-4")
+- `model_provider`: Provider enum (chatgpt, claude, etc.)
+- `response`: AI response in markdown
+- `sources`: Array of source citations
+- `is_analysed`: Whether analysis has been run
+- `prompt_run_at`: When the prompt was executed
+
+**Partitioning:**
+
+- Monthly partitions by `prompt_run_at`
+- Efficient time-based queries
+- Automatic old partition cleanup (if configured)
+
+### Prompt Analysis Table
+
+Stores brand intelligence analysis:
+
+```sql packages/db/clickhouse-init/schema.sql
+CREATE TABLE IF NOT EXISTS analytics.prompt_analysis (
+    id String,
+    prompt_id String,
+    workspace_id String,
+    user_id String,
+    model_provider LowCardinality(String),
+    brand_analysis String DEFAULT '',
+    prompt String DEFAULT '',
+    prompt_run_at DateTime,
+    created_at DateTime DEFAULT now()
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(prompt_run_at)
+ORDER BY (
+    workspace_id,
+    prompt_id,
+    prompt_run_at,
+    model_provider
+);
+```
+
+**Reference**: `packages/db/clickhouse-init/schema.sql:37-54`
+
+**Key Fields:**
+
+- `brand_analysis`: JSON string containing analysis results
+  - `presence`: Boolean - is brand mentioned?
+  - `rank`: Number (1-10) - brand rank in response
+  - `sentiment_score`: Number (-1 to 1) - sentiment
+  - `competitors`: Array - mentioned competitors
+  - `best_known_for`: String - what brand is known for
+  - `pricing_perception`: String - price positioning
+  - `differentiators`: Array - key differentiators
+
+**Usage:**
+
+```typescript
+// Query with joined analysis
+const result = await clickhouse.query({
+  query: `
+    SELECT
+      pr.prompt,
+      pr.response,
+      pr.model_provider,
+      pa.brand_analysis
+    FROM analytics.prompt_responses pr
+    LEFT JOIN analytics.prompt_analysis pa
+      ON pr.prompt_id = pa.prompt_id
+      AND pr.workspace_id = pa.workspace_id
+      AND pr.model_provider = pa.model_provider
+      AND pr.prompt_run_at = pa.prompt_run_at
+    WHERE pr.workspace_id = {workspaceId:String}
+  `,
+  query_params: { workspaceId },
+  format: "JSONEachRow",
+});
+```
+
+## Migration Workflow
+
+### PostgreSQL Migrations
+
+Drizzle Kit manages PostgreSQL schema migrations:
+
+```typescript packages/db/drizzle.config.ts
+import type { Config } from "drizzle-kit";
+
+export default {
+  schema: ["./src/schema/auth.ts", "./src/schema/workspace.ts"],
+  out: "./drizzle",
+  dialect: "postgresql",
+  dbCredentials: {
+    url: process.env.DATABASE_URL,
+  },
+} satisfies Config;
+```
+
+**Reference**: `packages/db/drizzle.config.ts:10-19`
+
+**Commands:**
+
+```bash
+# Generate migration from schema changes
+pnpm db:generate
+
+# Output: drizzle/0001_migration_name.sql
+
+# Apply migrations to database
+pnpm db:migrate
+
+# Push schema directly (dev only, no migration files)
+pnpm db:push
+
+# Open Drizzle Studio (database GUI)
+pnpm db:studio
+```
+
+**Example Migration:**
+
+```sql packages/db/drizzle/0000_famous_smiling_tiger.sql
+CREATE TABLE IF NOT EXISTS "workspaces" (
+  "id" varchar(256) PRIMARY KEY NOT NULL,
+  "name" varchar(256) NOT NULL,
+  "slug" varchar(256) NOT NULL,
+  "domain" varchar(256) NOT NULL,
+  "tenant_id" varchar(256) NOT NULL,
+  "schedule" varchar(64),
+  "enabled_providers" text DEFAULT
+    '["chatgpt","claude","perplexity","gemini","ai-overview"]' NOT NULL,
+  "created_at" timestamp DEFAULT now() NOT NULL,
+  "deleted_at" timestamp
+);
+
+CREATE TABLE IF NOT EXISTS "workspace_members" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "workspace_id" text NOT NULL,
+  "user_id" text NOT NULL,
+  "role" text DEFAULT 'member' NOT NULL,
+  "created_at" timestamp DEFAULT now() NOT NULL,
+  "deleted_at" timestamp
+);
+
+ALTER TABLE "workspace_members"
+  ADD CONSTRAINT "workspace_members_workspace_id_workspaces_id_fk"
+  FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("id")
+  ON DELETE cascade;
+```
+
+### ClickHouse Schema Changes
+
+ClickHouse schema is managed via init scripts:
+
+**Location:** `packages/db/clickhouse-init/schema.sql`
+
+**Safe Schema Changes:**
+
+```sql
+-- Add column (safe, uses default for existing rows)
+ALTER TABLE analytics.prompt_responses
+ADD COLUMN IF NOT EXISTS new_field String DEFAULT '';
+
+-- Add index
+ALTER TABLE analytics.prompt_responses
+ADD INDEX idx_workspace_id workspace_id TYPE bloom_filter GRANULARITY 1;
+
+-- Modify default value
+ALTER TABLE analytics.prompt_responses
+MODIFY COLUMN is_analysed Bool DEFAULT false;
+```
+
+**Dangerous Operations:**
+
+```sql
+-- Dropping columns (data loss!)
+ALTER TABLE analytics.prompt_responses
+DROP COLUMN old_field;
+
+-- Changing column type (requires careful migration)
+ALTER TABLE analytics.prompt_responses
+MODIFY COLUMN model_provider String;
+```
+
+**Best Practice:** Always use `IF NOT EXISTS` and `IF EXISTS` for idempotent migrations.
+
+## Querying Data
+
+### PostgreSQL Queries
+
+#### Simple Select
+
+```typescript
+import { db, schema } from "@oneglanse/db";
+import { eq } from "drizzle-orm";
+
+const workspace = await db.query.workspaces.findFirst({
+  where: eq(schema.workspaces.id, "workspace_123"),
+});
+```
+
+#### Joins
+
+```typescript
+import { db, schema } from "@oneglanse/db";
+import { eq, and, isNull } from "drizzle-orm";
+
+const members = await db
+  .select({
+    memberId: schema.workspaceMembers.id,
+    userId: schema.workspaceMembers.userId,
+    role: schema.workspaceMembers.role,
+    userName: schema.user.name,
+    userEmail: schema.user.email,
+  })
+  .from(schema.workspaceMembers)
+  .innerJoin(
+    schema.user,
+    eq(schema.user.id, schema.workspaceMembers.userId)
+  )
+  .where(
+    and(
+      eq(schema.workspaceMembers.workspaceId, workspaceId),
+      isNull(schema.workspaceMembers.deletedAt)
+    )
+  );
+```
+
+**Reference**: `packages/services/src/workspace/query.ts:96-114`
+
+#### Transactions
+
+```typescript
+import { db, schema } from "@oneglanse/db";
+
+await db.transaction(async (tx) => {
+  // Insert workspace
+  const [workspace] = await tx
+    .insert(schema.workspaces)
+    .values({ id: "workspace_123", name: "Acme" })
+    .returning();
+  
+  // Add creator as member
+  await tx.insert(schema.workspaceMembers).values({
+    workspaceId: workspace.id,
+    userId: "user_456",
+    role: "owner",
+  });
+});
+```
+
+### ClickHouse Queries
+
+#### Basic Query
+
+```typescript
+import { clickhouse } from "@oneglanse/db";
+
+const result = await clickhouse.query({
+  query: `
+    SELECT
+      prompt,
+      COUNT(*) as response_count
+    FROM analytics.prompt_responses
+    WHERE workspace_id = {workspaceId:String}
+    GROUP BY prompt
+    ORDER BY response_count DESC
+    LIMIT 10
+  `,
+  query_params: { workspaceId: "workspace_123" },
+  format: "JSONEachRow",
+});
+
+const rows = await result.json();
+```
+
+#### Time-Range Queries
+
+```typescript
+const result = await clickhouse.query({
+  query: `
+    SELECT
+      model_provider,
+      COUNT(*) as count,
+      AVG(length(response)) as avg_length
+    FROM analytics.prompt_responses
+    WHERE workspace_id = {workspaceId:String}
+      AND prompt_run_at >= now() - INTERVAL 7 DAY
+    GROUP BY model_provider
+  `,
+  query_params: { workspaceId },
+  format: "JSONEachRow",
+});
+```
+
+#### Array Operations
+
+```typescript
+// Unnest sources array
+const result = await clickhouse.query({
+  query: `
+    SELECT
+      arrayJoin(sources).domain as domain,
+      COUNT(*) as citation_count
+    FROM analytics.prompt_responses
+    WHERE workspace_id = {workspaceId:String}
+      AND length(sources) > 0
+    GROUP BY domain
+    ORDER BY citation_count DESC
+    LIMIT 20
+  `,
+  query_params: { workspaceId },
+  format: "JSONEachRow",
+});
+```
+
+#### Insert Data
+
+```typescript
+import { clickhouse } from "@oneglanse/db";
+import { randomUUID } from "crypto";
+
+await clickhouse.insert({
+  table: "analytics.prompt_responses",
+  values: [
+    {
+      id: randomUUID(),
+      prompt_id: "prompt_123",
+      prompt: "Best CRM for startups",
+      user_id: "user_456",
+      workspace_id: "workspace_789",
+      model: "gpt-4",
+      model_provider: "chatgpt",
+      response: "HubSpot is a great choice...",
+      sources: [
+        {
+          title: "HubSpot CRM Features",
+          cited_text: "Free CRM for small teams",
+          url: "https://hubspot.com/products/crm",
+          domain: "hubspot.com",
+          favicon: "https://hubspot.com/favicon.ico",
+        },
+      ],
+      is_analysed: false,
+      prompt_run_at: new Date(),
+      created_at: new Date(),
+    },
+  ],
+  format: "JSONEachRow",
+});
+```
+
+## Environment Variables
+
+```bash
+# PostgreSQL
+DATABASE_URL=postgresql://user:pass@localhost:5432/oneglanse
+
+# ClickHouse
+CLICKHOUSE_URL=http://localhost:8123
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASSWORD=
+CLICKHOUSE_DB=analytics
+```
+
+## Performance Optimization
+
+### PostgreSQL Indexes
+
+```typescript
+// Workspace members lookup
+index("workspace_members_workspace_id_idx").on(table.workspaceId)
+
+// User lookup
+index("workspace_members_user_id_idx").on(table.userId)
+
+// Unique active membership
+uniqueIndex("workspace_members_unique_active")
+  .on(table.workspaceId, table.userId)
+  .where(sql`${table.deletedAt} IS NULL`)
+```
+
+### ClickHouse Optimizations
+
+**Partitioning:**
+
+```sql
+PARTITION BY toYYYYMM(prompt_run_at)
+```
+
+Benefits:
+- Efficient time-range queries
+- Drop old partitions for data retention
+- Parallel processing per partition
+
+**Primary Key Ordering:**
+
+```sql
+ORDER BY (workspace_id, prompt_run_at, model_provider, prompt_id)
+```
+
+Benefits:
+- Fast workspace filtering
+- Time-range scans
+- Provider filtering
+
+**LowCardinality:**
+
+```sql
+model_provider LowCardinality(String)
+```
+
+Benefits:
+- Reduced storage for enums
+- Faster filtering
+- Better compression
+
+**ReplacingMergeTree:**
+
+```sql
+ENGINE = ReplacingMergeTree()
+```
+
+Benefits:
+- Automatic deduplication
+- Eventual consistency
+- Efficient upserts
+
+## Development Commands
+
+```bash
+# PostgreSQL
+pnpm db:generate   # Generate migration from schema
+pnpm db:migrate    # Apply migrations
+pnpm db:push       # Push schema directly (dev only)
+pnpm db:studio     # Open Drizzle Studio
+
+# Type checking
+pnpm typecheck
+
+# Build package
+pnpm build
+```
+
+## Related Documentation
+
+- [Services Layer](/development/services-layer) - Data access functions
+- [Web App](/development/web-app) - How the web app uses the database
+- [Agent Worker](/development/agent-worker) - How the worker stores data

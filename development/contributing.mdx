@@ -1,0 +1,422 @@
+---
+title: Contributing to OneGlanse
+description: Development setup, code standards, and contribution workflow for the OneGlanse platform
+---
+
+## Overview
+
+OneGlanse is an open-source monorepo that tracks how AI providers mention brands. This guide covers everything you need to start contributing.
+
+## Repository Structure
+
+The codebase is organized as a pnpm + Turborepo monorepo:
+
+```
+oneglanse/
+├── apps/
+│   ├── web/          # Main product app (Next.js + tRPC)
+│   ├── agent/        # Browser automation worker (Playwright + BullMQ)
+│   ├── landing/      # Marketing website
+│   └── docs/         # Documentation site
+├── packages/
+│   ├── db/           # Database schema (Postgres + ClickHouse)
+│   ├── services/     # Business logic layer
+│   ├── types/        # Shared TypeScript types
+│   ├── ui/           # React component library
+│   ├── utils/        # Utility functions
+│   └── errors/       # Error handling primitives
+└── biome.json        # Code formatting config
+```
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- **Node.js 20+** (required)
+- **pnpm 10+** (package manager)
+- **Docker + Docker Compose** (for infrastructure)
+- **Git** for version control
+
+## Development Environment Setup
+
+<Steps>
+
+### Clone the repository
+
+```bash
+git clone https://github.com/yourusername/oneglanse.git
+cd oneglanse
+```
+
+### Install dependencies
+
+```bash
+pnpm install
+```
+
+This installs all workspace dependencies using pnpm's efficient linking.
+
+### Configure environment variables
+
+Create environment files from the examples:
+
+```bash
+cp .env.example .env
+cp apps/agent/.env.example apps/agent/.env
+```
+
+Edit these files with your local configuration. Key variables:
+
+- `DATABASE_URL` - PostgreSQL connection string
+- `CLICKHOUSE_URL`, `CLICKHOUSE_DB`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` - ClickHouse config
+- `REDIS_URL` - Redis connection for BullMQ
+- `BETTER_AUTH_SECRET` - Auth secret key
+- `APP_URL`, `API_BASE_URL` - Local URLs (typically `http://localhost:3000`)
+
+### Start infrastructure services
+
+Launch Postgres, ClickHouse, and Redis using Docker Compose:
+
+```bash
+docker compose up -d db clickhouse redis
+```
+
+### Run database migrations
+
+```bash
+pnpm db:migrate
+```
+
+### Start the development servers
+
+You can run all apps simultaneously or start specific ones:
+
+```bash
+# Run all apps
+pnpm dev
+
+# Or run specific apps in separate terminals:
+pnpm dev:web      # Product app on port 3000
+pnpm dev:agent    # Agent worker
+pnpm dev:landing  # Landing site
+pnpm dev:docs     # Documentation site
+```
+
+</Steps>
+
+## Code Style and Conventions
+
+### Formatting with Biome
+
+We use [Biome](https://biomejs.dev) for code formatting and linting. Configuration is in `biome.json`:
+
+```json
+{
+  "$schema": "https://biomejs.dev/schemas/1.5.3/schema.json",
+  "files": {
+    "ignore": [
+      "node_modules",
+      "dist",
+      "build",
+      ".next",
+      ".turbo",
+      ".vercel",
+      "coverage"
+    ]
+  }
+}
+```
+
+**Format your code before committing:**
+
+```bash
+pnpm lint:fix
+```
+
+This runs `biome check . --fix` across the entire monorepo.
+
+### TypeScript Standards
+
+- **Strict mode enabled** - All workspaces use strict TypeScript
+- **Type safety first** - Avoid `any`, prefer `unknown` when type is uncertain
+- **Shared types** - Domain types go in `packages/types/src/types/`
+- **Import extensions** - Use `.js` extensions for ESM imports (TypeScript convention)
+
+### File Organization
+
+- **Colocation** - Keep related files together (component + styles + tests)
+- **Barrel exports** - Use `index.ts` for clean public APIs
+- **Naming conventions**:
+  - Components: `PascalCase.tsx`
+  - Utilities: `camelCase.ts`
+  - Types: `camelCase.ts` or descriptive names like `agent.ts`
+  - Constants: `UPPER_SNAKE_CASE`
+
+### Workspace Dependencies
+
+- **Cross-workspace imports** - Use workspace protocol: `"@oneglanse/types": "workspace:*"`
+- **Shared code placement**:
+  - Business logic → `packages/services`
+  - Type definitions → `packages/types`
+  - UI components → `packages/ui`
+  - Utilities → `packages/utils`
+  - Errors → `packages/errors`
+
+## Running Tests
+
+Currently, the repository uses TypeScript's type checking as the primary validation:
+
+```bash
+# Typecheck all workspaces
+pnpm typecheck
+
+# Typecheck specific workspace
+pnpm --filter @oneglanse/agent typecheck
+```
+
+The CI pipeline (`.github/workflows/build.yml`) runs `pnpm typecheck` on every push.
+
+## Common Development Tasks
+
+### Database Operations
+
+```bash
+# Generate Drizzle schema files
+pnpm db:generate
+
+# Run migrations
+pnpm db:migrate
+
+# Push schema changes directly (dev only)
+pnpm db:push
+
+# Open Drizzle Studio
+pnpm db:studio
+```
+
+### Building Apps
+
+```bash
+# Build all workspaces
+pnpm build
+
+# Build specific workspace
+pnpm --filter @oneglanse/agent build
+```
+
+### Cleaning Build Artifacts
+
+```bash
+# Clean all Turbo caches and outputs
+pnpm clean
+```
+
+## Pull Request Process
+
+<Steps>
+
+### Create a feature branch
+
+```bash
+git checkout -b feature/your-feature-name
+```
+
+Use descriptive branch names:
+- `feature/` - New features
+- `fix/` - Bug fixes
+- `docs/` - Documentation updates
+- `refactor/` - Code refactoring
+
+### Make your changes
+
+- Write clean, well-documented code
+- Follow the code style conventions
+- Update types in `packages/types` if needed
+- Test your changes locally
+
+### Run quality checks
+
+Before committing:
+
+```bash
+# Format code
+pnpm lint:fix
+
+# Type check
+pnpm typecheck
+
+# Test build
+pnpm build
+```
+
+### Commit your changes
+
+Write clear, descriptive commit messages:
+
+```bash
+git add .
+git commit -m "feat: add support for new provider"
+```
+
+Commit message format:
+- `feat:` - New feature
+- `fix:` - Bug fix
+- `docs:` - Documentation
+- `refactor:` - Code refactoring
+- `chore:` - Maintenance tasks
+
+### Push and create PR
+
+```bash
+git push origin feature/your-feature-name
+```
+
+Then open a pull request on GitHub with:
+- **Clear title** describing the change
+- **Description** explaining what and why
+- **Testing notes** if applicable
+- Link to any related issues
+
+### CI Validation
+
+The build workflow (`.github/workflows/build.yml`) will:
+1. Run `pnpm typecheck` on all workspaces
+2. Detect which apps changed
+3. Build affected Docker images
+4. Push to GitHub Container Registry
+
+</Steps>
+
+## Finding Tasks to Work On
+
+### GitHub Issues
+
+Check the [Issues tab](https://github.com/yourusername/oneglanse/issues) for:
+- `good first issue` - Great for newcomers
+- `help wanted` - Contributions welcome
+- `bug` - Bug fixes needed
+- `enhancement` - Feature requests
+
+### Project Areas
+
+Depending on your interests:
+
+**Frontend/UI** → `apps/web`, `apps/landing`, `packages/ui`
+
+**Backend/API** → `apps/web` tRPC routes, `packages/services`
+
+**Browser Automation** → `apps/agent`, provider implementations
+
+**Database** → `packages/db`, migrations, schema
+
+**Documentation** → `apps/docs`, README files
+
+### Starting Points
+
+1. **Add a new AI provider** - See [Adding Providers](/development/adding-providers) guide
+2. **Improve error handling** - Enhance `packages/errors`
+3. **Add UI components** - Build reusable components in `packages/ui`
+4. **Optimize queries** - Improve database performance
+5. **Write documentation** - Help others understand the codebase
+
+## Community Guidelines
+
+### Code of Conduct
+
+- Be respectful and inclusive
+- Welcome newcomers and help them learn
+- Provide constructive feedback
+- Focus on what is best for the community
+
+### Getting Help
+
+- **GitHub Discussions** - Ask questions, share ideas
+- **Issues** - Report bugs, request features
+- **Pull Requests** - Review others' code, get feedback on yours
+
+### Review Process
+
+All contributions go through code review:
+- Maintainers will review your PR
+- Address feedback promptly
+- Be open to suggestions
+- Iterate until approval
+
+## Architecture Principles
+
+### Monorepo Best Practices
+
+- **Build dependencies** - Apps depend on packages, packages can depend on each other
+- **Turbo caching** - Turbo caches build outputs for speed
+- **Workspace isolation** - Each package has its own `package.json`
+
+### Data Flow
+
+1. User configures prompts in `apps/web`
+2. Jobs submitted via `packages/services` → BullMQ queues
+3. `apps/agent` workers consume jobs
+4. Playwright browsers execute prompts on AI providers
+5. Responses stored in Postgres/ClickHouse
+6. Analysis jobs process responses into metrics
+7. `apps/web` displays results in dashboards
+
+### Service Layer Pattern
+
+- **Business logic** lives in `packages/services`
+- **Apps** call service functions, not DB directly
+- **Services** handle validation, orchestration, side effects
+- **Types** define contracts between layers
+
+## Debugging Tips
+
+### Agent Development
+
+When working on `apps/agent`:
+
+```typescript
+// Enable debug mode in .env
+DEBUG_ENABLED=true
+
+// Use logger from utils
+import { logger } from "@oneglanse/utils";
+logger.log("Debug message");
+logger.error("Error occurred", error);
+```
+
+### Browser Automation
+
+For Playwright debugging:
+
+```bash
+# Run with headed browser
+PWDEBUG=1 pnpm dev:agent
+
+# Slow down execution
+SLOWMO=1000 pnpm dev:agent
+```
+
+### Database Queries
+
+Use Drizzle Studio to inspect data:
+
+```bash
+pnpm db:studio
+```
+
+## Additional Resources
+
+- **Main README** - `/README.md` - Repository overview
+- **Workspace READMEs** - Each `apps/*` and `packages/*` has its own README
+- **Type Definitions** - `packages/types/src/types/` - Domain models
+- **Provider Configs** - `apps/agent/src/core/providers/` - AI provider implementations
+
+## Questions?
+
+If you have questions not covered here:
+
+1. Check the [documentation](https://docs.oneglanse.com)
+2. Search [GitHub Issues](https://github.com/yourusername/oneglanse/issues)
+3. Ask in [GitHub Discussions](https://github.com/yourusername/oneglanse/discussions)
+4. Open a new issue with the `question` label
+
+Welcome to the OneGlanse community! We're excited to have you contribute.

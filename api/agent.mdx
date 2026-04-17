@@ -1,0 +1,307 @@
+---
+title: 'Agent API'
+description: 'Run automated agents to collect and analyze prompts'
+---
+
+## Overview
+
+The Agent API allows you to run automated agents that collect prompts from AI providers and analyze them for brand mentions. Agents handle the entire workflow from prompt collection to analysis asynchronously.
+
+## Endpoints
+
+### run
+
+Trigger an agent run to collect prompts from enabled AI providers and analyze them.
+
+**Type**: Mutation (Authorized Workspace)
+
+**Rate Limit**: 3 requests per minute
+
+<ParamField path="workspaceId" type="string" required>
+  ID of the workspace to run the agent for
+</ParamField>
+
+<ResponseField name="jobId" type="string | null">
+  Unique identifier for the agent job. Use this to check job status.
+  
+  Returns `null` if status is "empty"
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Status of the agent run:
+  
+  - `"queued"`: Agent job was successfully queued and is processing
+  - `"empty"`: No prompts to collect or analyze
+</ResponseField>
+
+<CodeGroup>
+```typescript Request
+const result = await trpc.agent.run.mutate({
+  workspaceId: "ws_abc123"
+});
+```
+
+```typescript Success Response
+{
+  jobId: "job_xyz789",
+  status: "queued"
+}
+```
+
+```typescript Empty Response
+{
+  jobId: null,
+  status: "empty"
+}
+```
+</CodeGroup>
+
+---
+
+### status
+
+Check the status of a running agent job.
+
+**Type**: Query (Authorized Workspace)
+
+<ParamField path="workspaceId" type="string" required>
+  ID of the workspace
+</ParamField>
+
+<ParamField path="jobId" type="string" required>
+  Job ID returned from the run endpoint
+</ParamField>
+
+<ResponseField name="status" type="string">
+  Current status of the job:
+  
+  - `"pending"`: Job is still processing
+  - `"completed"`: Job has finished
+</ResponseField>
+
+<ResponseField name="response" type="object | null">
+  Job result data when completed, or null if still pending
+</ResponseField>
+
+<CodeGroup>
+```typescript Request
+const status = await trpc.agent.status.query({
+  workspaceId: "ws_abc123",
+  jobId: "job_xyz789"
+});
+```
+
+```typescript Pending Response
+{
+  status: "pending",
+  response: null
+}
+```
+
+```typescript Completed Response
+{
+  status: "completed",
+  response: {
+    promptsCollected: 50,
+    promptsAnalyzed: 50,
+    mentionsFound: 23,
+    providers: ["openai", "anthropic"],
+    completedAt: Date
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## Agent Workflow
+
+The agent performs the following steps:
+
+1. **Collection**: Queries enabled AI providers for prompts related to your domain
+2. **Storage**: Stores collected prompts with source metadata
+3. **Analysis**: Analyzes prompts for brand mentions
+4. **Metrics**: Generates aggregated metrics and insights
+
+### Prerequisites
+
+Before running an agent:
+
+1. **Configure Enabled Providers**: Set which AI providers to collect from
+   ```typescript
+   await trpc.workspace.setEnabledProviders.mutate({
+     workspaceId: "ws_abc123",
+     providers: ["openai", "anthropic", "google"]
+   });
+   ```
+
+2. **Set Domain**: Ensure your workspace has a target domain configured
+   ```typescript
+   await trpc.workspace.updateDetails.mutate({
+     workspaceId: "ws_abc123",
+     name: "Acme Tracking",
+     domain: "acme.com"
+   });
+   ```
+
+---
+
+## Usage Examples
+
+### One-Time Agent Run
+
+Manually trigger an agent run:
+
+```typescript
+// Start the agent
+const run = await trpc.agent.run.mutate({
+  workspaceId: "ws_abc123"
+});
+
+if (run.status === "empty") {
+  console.log("No prompts to collect");
+} else {
+  console.log(`Agent started with job ID: ${run.jobId}`);
+  
+  // Poll for completion
+  let status = await trpc.agent.status.query({
+    workspaceId: "ws_abc123",
+    jobId: run.jobId
+  });
+  
+  while (status.status === "pending") {
+    await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+    status = await trpc.agent.status.query({
+      workspaceId: "ws_abc123",
+      jobId: run.jobId
+    });
+  }
+  
+  console.log("Agent completed:", status.response);
+}
+```
+
+### Scheduled Agent Runs
+
+Instead of manually triggering agents, you can schedule them using the Workspace API:
+
+```typescript
+// Set up daily analysis at midnight UTC
+const result = await trpc.workspace.setSchedule.mutate({
+  workspaceId: "ws_abc123",
+  schedule: "0 0 * * *" // Cron expression
+});
+
+// The immediate run is triggered automatically
+console.log("Schedule set, immediate run status:", result.immediateRun);
+
+// Check when the next scheduled run will occur
+const timing = await trpc.workspace.getCronTiming.query({
+  workspaceId: "ws_abc123"
+});
+
+console.log(`Next run: ${timing.nextRun}`);
+console.log(`Last run: ${timing.lastPromptRun}`);
+```
+
+---
+
+## Polling Best Practices
+
+When checking agent job status:
+
+### Exponential Backoff
+
+Implement exponential backoff to reduce API calls:
+
+```typescript
+async function waitForCompletion(
+  workspaceId: string,
+  jobId: string,
+  maxWaitMs = 300000 // 5 minutes
+) {
+  const startTime = Date.now();
+  let delay = 1000; // Start with 1 second
+  
+  while (Date.now() - startTime < maxWaitMs) {
+    const status = await trpc.agent.status.query({
+      workspaceId,
+      jobId
+    });
+    
+    if (status.status === "completed") {
+      return status.response;
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, delay));
+    delay = Math.min(delay * 1.5, 10000); // Max 10 seconds
+  }
+  
+  throw new Error("Agent job timeout");
+}
+```
+
+### Webhooks (Future)
+
+Webhook support for agent completion notifications is planned for a future release.
+
+---
+
+## Error Scenarios
+
+### Empty Status
+
+If the agent returns `status: "empty"`, possible reasons:
+
+- No prompts have been stored yet
+- All prompts have already been analyzed (with `analyzeAll: false`)
+- No enabled AI providers configured
+
+```typescript
+const run = await trpc.agent.run.mutate({
+  workspaceId: "ws_abc123"
+});
+
+if (run.status === "empty") {
+  // Check if prompts exist
+  const prompts = await trpc.prompt.fetchUserPrompts.query({
+    workspaceId: "ws_abc123"
+  });
+  
+  if (prompts.length === 0) {
+    console.log("No prompts stored yet");
+  } else {
+    console.log("All prompts already analyzed");
+  }
+}
+```
+
+### Rate Limit Exceeded
+
+The agent endpoint is limited to 3 runs per minute:
+
+```typescript
+try {
+  await trpc.agent.run.mutate({ workspaceId: "ws_abc123" });
+} catch (error) {
+  if (error.code === "TOO_MANY_REQUESTS") {
+    console.log("Rate limit exceeded, please wait before retrying");
+  }
+}
+```
+
+---
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Workspace Schedule" icon="clock" href="/api/workspace#setschedule">
+    Automate agent runs with cron schedules
+  </Card>
+  <Card title="Analysis API" icon="chart-line" href="/api/analysis">
+    View analysis results
+  </Card>
+  <Card title="Prompts API" icon="message" href="/api/prompts">
+    Manual prompt submission
+  </Card>
+</CardGroup>

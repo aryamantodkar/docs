@@ -1,0 +1,894 @@
+---
+title: 'Interpreting Metrics'
+description: 'Deep dive into GEO scores, sentiment analysis, competitive positioning, and how to act on AI visibility insights'
+---
+
+## Overview
+
+OneGlance tracks how AI providers mention your brand using multiple metrics. This guide explains what each metric means, how it's calculated, and how to use it for strategic decisions.
+
+<Note>
+  All metrics are derived from **actual AI provider responses** to your prompts. OneGlance does not simulate or estimate—every score is grounded in real LLM output.
+</Note>
+
+## Core Metrics Explained
+
+### GEO Score (Generative Engine Optimization)
+
+The GEO Score (0-100) measures your brand's overall AI visibility. It's a weighted average of four components:
+
+```typescript
+// From packages/services/src/analysis/analysisPrompt.ts:262
+overall = round(
+  (visibility_value × 0.25) +
+  (rank_value × 0.25) +
+  (sentiment_value × 0.25) +
+  (recommendation_value × 0.25)
+)
+```
+
+<CardGroup cols={2}>
+  <Card title="Visibility (25%)" icon="eye">
+    How prominently your brand appears in responses.
+
+    **Factors**:
+    - Coverage: How much text discusses your brand
+    - Placement: Where your brand first appears
+    - Structural prominence: Headings, lists, emphasis
+    - Frequency: Number of mentions
+    - Contextual framing: Role in the response
+  </Card>
+
+  <Card title="Rank (25%)" icon="ranking-star">
+    Your position in recommendation lists.
+
+    **Mapping**:
+    - #1 → 100 points
+    - #2 → 80 points
+    - #3 → 65 points
+    - #4 → 50 points
+    - #5 → 40 points
+    - #6+ → 30 points
+    - Mentioned but unranked → 15 points
+    - Absent → 0 points
+  </Card>
+
+  <Card title="Sentiment (25%)" icon="heart">
+    Tone of mentions (positive/neutral/negative).
+
+    **Scale**:
+    - 81-100: Enthusiastic superlatives
+    - 60-80: Favorable with caveats
+    - 41-59: Neutral/factual
+    - 21-40: Significant drawbacks
+    - 0-20: Actively discouraged
+  </Card>
+
+  <Card title="Recommendation (25%)" icon="check-circle">
+    Strength of endorsement.
+
+    **Types**:
+    - Top pick: 100 points
+    - Strong alternative: 80 points
+    - Conditional: 60 points
+    - Mentioned only: 30 points
+    - Discouraged: 10 points
+    - Not mentioned: 0 points
+  </Card>
+</CardGroup>
+
+### Interpreting GEO Score Ranges
+
+<Accordion title="80-100: Dominant AI Visibility">
+  **What it means**: Your brand is a go-to recommendation for this prompt topic.
+
+  **Typical characteristics**:
+  - Listed in top 3 absolute positions
+  - Positive sentiment with superlatives ("best", "excellent", "standout")
+  - Recommended without major caveats
+  - Multiple mentions throughout response
+
+  **Example response excerpt**:
+  > "For sales pipeline management, **HubSpot** stands out as the top choice for mid-market teams. Its intuitive interface, robust integrations, and excellent customer support make it the clear leader in this space. HubSpot consistently ranks #1 for ease of use..."
+
+  **Strategic actions**:
+  - Maintain current positioning (don't relax)
+  - Identify what content/sources AI providers cite
+  - Expand to adjacent prompt categories
+  - Monitor competitors for shifts
+</Accordion>
+
+<Accordion title="60-79: Strong AI Presence">
+  **What it means**: Your brand is reliably mentioned and favorably positioned.
+
+  **Typical characteristics**:
+  - Appears in top 3-5 positions
+  - Positive sentiment, often with conditions ("great for X use case")
+  - Recommended as a strong alternative
+  - Discussed alongside category leaders
+
+  **Example response excerpt**:
+  > "While Salesforce dominates enterprise CRM, **Pipedrive** is an excellent choice for small to mid-sized sales teams. It offers streamlined pipeline management at a fraction of the cost, though it lacks some advanced features."
+
+  **Strategic actions**:
+  - Push for #1 ranking: Address caveats mentioned by AI
+  - Increase content volume on differentiators
+  - Target prompts where you rank #4-5 to break into top 3
+</Accordion>
+
+<Accordion title="40-59: Moderate Visibility">
+  **What it means**: Your brand appears but isn't prominently recommended.
+
+  **Typical characteristics**:
+  - Ranked #5-8 or mentioned without ranking
+  - Neutral sentiment (factual descriptions)
+  - Listed among "other options" or "also consider"
+  - Limited coverage (1-2 sentences)
+
+  **Example response excerpt**:
+  > "Other CRM tools worth considering include **Freshsales**, Copper, and Close. Each has its strengths, but they're generally less popular than HubSpot or Salesforce."
+
+  **Strategic actions**:
+  - Diagnose why you're not higher: lack of content? competitor dominance? outdated info?
+  - Publish authoritative content targeting this prompt topic
+  - Get featured in high-authority review sites (G2, Capterra) that AI providers cite
+  - Test prompt variations to see if wording affects ranking
+</Accordion>
+
+<Accordion title="20-39: Low Visibility">
+  **What it means**: Your brand rarely appears or is positioned negatively.
+
+  **Typical characteristics**:
+  - Mentioned only in passing or as a negative example
+  - Appears in "long tail" (rank #10+)
+  - Contrastive mentions ("unlike [YourBrand], Competitor X...")
+  - Low sentiment or factual errors
+
+  **Example response excerpt**:
+  > "Many teams have moved away from legacy tools like **SugarCRM** in favor of more modern alternatives such as HubSpot and Pipedrive."
+
+  **Strategic actions**:
+  - Investigate if AI has outdated information about your brand
+  - Check for factual errors in AI responses (file corrections if possible)
+  - Increase PR and content marketing to update AI training data
+  - Consider rebranding or repositioning if perception is entrenched
+</Accordion>
+
+<Accordion title="0-19: Absent or Harmful">
+  **What it means**: Your brand is missing from AI recommendations or actively criticized.
+
+  **Typical characteristics**:
+  - Not mentioned at all in responses
+  - Appears only with warnings or discouragements
+  - AI lacks awareness of your brand in this category
+  - Competitors dominate all rankings
+
+  **Example**: Prompt "What are the best CRM tools?" returns no mention of your brand.
+
+  **Strategic actions**:
+  - Confirm your brand name and domain are correct in workspace settings
+  - Audit if AI providers even know your brand exists (test with direct brand queries)
+  - Launch aggressive content marketing and link-building campaigns
+  - Get listed on major review platforms
+  - Consider partnerships or PR to raise awareness
+</Accordion>
+
+## Detailed Metrics Breakdown
+
+### Presence Metrics
+
+Found on the Dashboard and Prompts pages.
+
+#### Presence Rate
+
+**Definition**: Percentage of AI responses where your brand was mentioned.
+
+**Calculation**:
+```typescript
+presenceRate = (responses_with_brand_mention / total_responses) × 100
+```
+
+**Example**: 10 prompts × 5 providers = 50 responses. Brand mentioned in 33 responses.
+```
+Presence Rate = (33 / 50) × 100 = 66%
+```
+
+**Interpretation**:
+- **80-100%**: Excellent category awareness
+- **60-79%**: Strong presence, some gaps
+- **40-59%**: Moderate presence, significant room for growth
+- **20-39%**: Low awareness, major visibility issues
+- **0-19%**: Critical awareness gap
+
+<Tip>
+  If your presence rate is below 50%, start with **brand awareness prompts** rather than competitive prompts. Example: "What is [YourBrand]?" instead of "Compare [Competitor A] vs [Competitor B]".
+</Tip>
+
+#### Mention Count
+
+**Definition**: Number of times your brand is referenced in a single response.
+
+**Counting rules** (from `packages/services/src/analysis/analysisPrompt.ts:48`):
+
+**Counts as a mention**:
+- Exact brand name: "HubSpot"
+- Domain reference: "hubspot.com"
+- Sub-products: "HubSpot CRM", "HubSpot Marketing Hub"
+- Well-known abbreviations: "SFDC" for Salesforce
+
+**Does NOT count**:
+- Brand name only in URLs/citations (not prose)
+- Partial string matches ("Hub" ≠ "HubSpot")
+- Brand mentioned in echoed user question (only counts in AI's own answer)
+
+**Strategic use**:
+- **High mention count (4+)**: Brand is central to the response → good visibility
+- **Low mention count (1-2)**: Brand is peripheral → increase content depth on this topic
+
+#### Visibility Score (0-100)
+
+A five-dimension calculation of how prominently your brand appears.
+
+<Tabs>
+  <Tab title="Coverage (25%)">
+    **Question**: How much text discusses your brand?
+
+    **Scoring**:
+    - 0-5: Name-dropped in a word or fragment
+    - 6-15: One brief sentence
+    - 16-30: Short paragraph (2-3 sentences)
+    - 31-50: Multiple paragraphs
+    - 51-75: One of the primary subjects
+    - 76-100: Dominates the response
+
+    From `packages/services/src/analysis/analysisPrompt.ts:190`:
+    ```
+    A. Coverage (25% weight) — How much space does the brand occupy?
+    Measure the proportion of the response's substantive content dedicated to {Brand}.
+    ```
+  </Tab>
+
+  <Tab title="Placement (25%)">
+    **Question**: Where does your brand first appear?
+
+    **Scoring**:
+    - 90-100: First sentence or opening recommendation
+    - 70-89: First quarter of response
+    - 40-69: Middle section
+    - 15-39: Last quarter
+    - 1-14: Final sentence or footnote
+    - 0: Absent
+
+    **Why it matters**: Users read top-to-bottom. Brands appearing early have higher recall and perceived authority.
+  </Tab>
+
+  <Tab title="Structural Prominence (20%)">
+    **Question**: Does your brand occupy high-attention positions?
+
+    **Scoring**:
+    - 80-100: In a heading, title, or explicit "top pick" slot
+    - 60-79: Numbered/bulleted list, top 3 positions
+    - 40-59: Numbered/bulleted list, position 4+
+    - 20-39: Inline paragraph prose (no emphasis)
+    - 1-19: Parenthetical or footnote
+    - 0: Absent
+
+    **Visual example**:
+    ```markdown
+    ## Best CRM Tools
+
+    1. **HubSpot** ← High structural prominence (heading + #1)
+    2. Salesforce
+    3. Pipedrive
+
+    Also consider Zoho, Freshsales, and Copper. ← Low structural prominence
+    ```
+  </Tab>
+
+  <Tab title="Frequency (15%)">
+    **Question**: How many times is your brand mentioned?
+
+    **Scoring**:
+    - 80-100: 6+ mentions
+    - 60-79: 4-5 mentions
+    - 40-59: 2-3 mentions
+    - 20-39: 1 mention
+    - 0: Not mentioned
+
+    **Note**: Only counts mentions in declarative content. Questions from the AI ("Have you considered [Brand]?") do NOT boost frequency.
+  </Tab>
+
+  <Tab title="Contextual Framing (15%)">
+    **Question**: In what role does your brand appear?
+
+    **Scoring**:
+    - 90-100: Direct answer to user's question
+    - 70-89: Actively recommended or highlighted
+    - 50-69: Compared alongside peers
+    - 30-49: Mentioned as context or example
+    - 10-29: Contrastive/negative reference
+    - 1-9: Only in a question (not substantive content)
+    - 0: Absent
+
+    **Example: Direct answer (90-100)**:
+    ```
+    User: "What's the best CRM for startups?"
+    AI: "HubSpot is the best CRM for startups due to..."
+    ```
+
+    **Example: Contrastive reference (10-29)**:
+    ```
+    User: "What makes Pipedrive better than competitors?"
+    AI: "Unlike HubSpot, which can be complex, Pipedrive focuses on simplicity..."
+    ```
+  </Tab>
+</Tabs>
+
+**Final visibility calculation**:
+```
+visibility = round(
+  (coverage × 0.25) +
+  (placement × 0.25) +
+  (structural_prominence × 0.20) +
+  (frequency × 0.15) +
+  (contextual_framing × 0.15)
+)
+```
+
+### Rank and Position
+
+#### Absolute Rank vs Local Rank
+
+<Warning>
+  OneGlance uses **absolute rank** (reading order across the entire response), NOT local rank (position within a sub-category).
+</Warning>
+
+**Example**:
+
+```markdown
+AI Response:
+
+## Best CRM for Small Teams
+1. HubSpot
+2. Pipedrive
+3. Freshsales
+
+## Best CRM for Enterprise
+1. Salesforce
+2. Microsoft Dynamics
+3. SAP CRM
+```
+
+| Brand | Local Rank | Absolute Rank |
+|-------|-----------|---------------|
+| HubSpot | #1 in Small Teams | #1 (first overall) |
+| Pipedrive | #2 in Small Teams | #2 |
+| Freshsales | #3 in Small Teams | #3 |
+| Salesforce | #1 in Enterprise | #4 (fourth brand mentioned) |
+| Microsoft Dynamics | #2 in Enterprise | #5 |
+| SAP CRM | #3 in Enterprise | #6 |
+
+From `packages/services/src/analysis/analysisPrompt.ts:129`:
+
+> In this example, Salesforce's LOCAL rank within "Best for Enterprise" is #1, but its ABSOLUTE rank in the full response is #4 (it is the 4th distinct brand listed overall).
+
+#### Why Absolute Rank Matters
+
+Users read responses sequentially. If your brand appears as "#1 for Enterprise" but is the 7th brand mentioned overall, most users may never reach it.
+
+**Strategic implication**: Aim for absolute top-3 positioning, not just top rank within a niche category.
+
+#### isTopPick vs isTopThree
+
+**isTopPick**:
+- Requires absolute rank #1 **AND** explicit superlative language
+- Examples: "best overall", "top recommendation", "our #1 pick"
+- Being listed first without superlatives → `isTopPick = false`
+
+**isTopThree**:
+- True if absolute rank is 1, 2, or 3
+- No language requirement—purely positional
+
+### Sentiment Analysis
+
+Sentiment measures the tone of AI mentions.
+
+#### Sentiment Score (0-100)
+
+From `packages/services/src/analysis/analysisPrompt.ts:162`:
+
+| Condition | Score Range |
+|-----------|-------------|
+| Response explicitly warns against or discourages the brand | 0-20 |
+| Response notes significant drawbacks or unfavorable comparisons | 21-40 |
+| Mention is purely factual/descriptive with zero evaluative language | 41-59 |
+| Response uses favorable language WITH noted limitations | 60-80 |
+| Response uses enthusiastic superlatives with NO caveats | 81-100 |
+
+**Anti-inflation rules**:
+- A score of 81+ requires EXPLICIT superlatives ("excellent", "best", "standout")
+- "Good", "solid", "popular" → 60-75 range, NOT 80+
+- Being listed in a recommendation list does NOT automatically = positive sentiment
+- If response lists BOTH pros AND cons → sentiment cannot exceed 79
+
+#### Sentiment Label
+
+Automatic label based on score:
+- **very_positive** (81-100)
+- **positive** (60-80)
+- **neutral** (41-59)
+- **negative** (21-40)
+- **very_negative** (0-20)
+
+#### Positives and Negatives Arrays
+
+Text snippets explaining sentiment.
+
+**Example from an 85-sentiment response**:
+```json
+{
+  "sentiment": {
+    "score": 85,
+    "label": "very_positive",
+    "positives": [
+      "Excellent integration ecosystem",
+      "Standout customer support",
+      "Best-in-class mobile app"
+    ],
+    "negatives": []
+  }
+}
+```
+
+**Example from a 45-sentiment response**:
+```json
+{
+  "sentiment": {
+    "score": 45,
+    "label": "neutral",
+    "positives": [],
+    "negatives": []
+  }
+}
+```
+
+<Tip>
+  If sentiment is consistently low (&lt;40) across multiple prompts, review the `negatives` array to identify recurring criticisms. These are signals for product or messaging improvements.
+</Tip>
+
+### Recommendation Type
+
+Classifies the strength of AI endorsement.
+
+From `packages/services/src/analysis/analysisPrompt.ts:334`:
+
+<Tabs>
+  <Tab title="top_pick">
+    **Definition**: Brand is explicitly named as the #1 choice with superlative language.
+
+    **Requirements**:
+    - Absolute rank #1
+    - Language: "best overall", "top recommendation", "our #1 pick"
+    - Must be positioned as top recommendation of the ENTIRE response (not just a sub-category)
+
+    **Points**: 100
+
+    **Example**:
+    > "For CRM tools, **HubSpot** is our top recommendation. It consistently delivers the best balance of features, usability, and support."
+  </Tab>
+
+  <Tab title="strong_alternative">
+    **Definition**: Absolute rank #1-3 OR clearly favorable language as a strong option.
+
+    **Points**: 80
+
+    **Example**:
+    > "Both **Pipedrive** and Salesforce are excellent choices, though they target different markets."
+  </Tab>
+
+  <Tab title="conditional">
+    **Definition**: Recommended only for specific use cases, budgets, or audiences.
+
+    **Points**: 60
+
+    **Example**:
+    > "**Zoho** is a good option if you're on a tight budget and don't need advanced features."
+  </Tab>
+
+  <Tab title="mentioned_only">
+    **Definition**: Named and described but not explicitly recommended.
+
+    **Points**: 30
+
+    **Example**:
+    > "Other CRM tools include **Copper**, Close, and Nutshell."
+  </Tab>
+
+  <Tab title="discouraged">
+    **Definition**: Response warns against or advises alternatives.
+
+    **Points**: 10
+
+    **Example**:
+    > "Avoid **LegacyCRM** due to poor customer support and frequent downtime."
+  </Tab>
+
+  <Tab title="not_mentioned">
+    **Definition**: Brand does not appear in the response.
+
+    **Points**: 0
+  </Tab>
+</Tabs>
+
+## Competitive Analysis
+
+### Competitor Extraction
+
+From `packages/services/src/analysis/analysisPrompt.ts:286`:
+
+**Included as competitors**:
+- Brands directly compared to yours in the same response
+- Brands listed alongside yours in rankings
+- Brands mentioned in the same category discussion
+
+**Excluded**:
+- Brands in a completely different section/topic
+- Generic category references ("CRM software" is not a competitor)
+- Your own brand (never listed as its own competitor)
+- Brands only in the user's prompt (not AI's response)
+
+### Competitor Deduplication
+
+From `packages/services/src/analysis/analysisPrompt.ts:302`:
+
+**Rule**: Sub-products are consolidated under the parent brand.
+
+**Examples**:
+- "Zoho CRM" + "Zoho One" + "Bigin by Zoho" → name: "Zoho"
+- "Google Workspace" + "Gmail" + "Google Docs" → name: "Google"
+- "Salesforce Sales Cloud" + "Service Cloud" → name: "Salesforce"
+
+**Why**: Prevents inflated competitor counts and provides clearer market landscape.
+
+### Competitor Metrics
+
+Each competitor has:
+
+<CardGroup cols={3}>
+  <Card title="Visibility" icon="eye">
+    Competitor's prominence in the response (same 5-dimension formula as your brand).
+  </Card>
+
+  <Card title="Sentiment" icon="heart">
+    How positively/negatively the competitor is mentioned.
+  </Card>
+
+  <Card title="Rank Position" icon="ranking-star">
+    Competitor's absolute rank in the response.
+  </Card>
+
+  <Card title="isRecommended" icon="check">
+    Boolean: Was the competitor explicitly recommended?
+  </Card>
+
+  <Card title="winsOver" icon="trophy">
+    Areas where the competitor beats your brand (per AI response).
+  </Card>
+
+  <Card title="losesTo" icon="x">
+    Areas where your brand beats the competitor.
+  </Card>
+</CardGroup>
+
+### Competitive Landscape Table
+
+On the Dashboard, the **Competitive Landscape** card shows:
+
+```tsx
+// From apps/web/src/app/(auth)/dashboard/page.tsx:178
+<CompetitiveLandscape competitors={metrics.competitorData} />
+```
+
+**Columns**:
+- **Brand**: Competitor name (deduplicated)
+- **Mentions**: Number of responses where competitor appeared
+- **Avg Rank**: Average absolute position across all mentions
+- **Sentiment**: Average sentiment score
+
+**Use case**: Quickly identify which competitors are most frequently mentioned and how they're positioned relative to you.
+
+## Advanced Metrics
+
+### Brand Perception
+
+Extracted from AI responses about how your brand is perceived.
+
+#### Core Claims
+
+Key statements AI providers make about your brand.
+
+**Example**:
+```json
+{
+  "perception": {
+    "coreClaims": [
+      "Intuitive interface designed for non-technical users",
+      "Strong email marketing integration",
+      "Generous free tier for startups"
+    ]
+  }
+}
+```
+
+**Strategic use**: Verify these claims match your messaging. If AI has incorrect or outdated claims, publish updated content.
+
+#### Differentiators
+
+What AI says sets your brand apart from competitors.
+
+**Example**:
+```json
+{
+  "perception": {
+    "differentiators": [
+      "Visual pipeline management",
+      "Mobile-first design",
+      "Built-in calling and email tracking"
+    ]
+  }
+}
+```
+
+**Strategic use**: Double down on differentiators that resonate. If AI doesn't mention your key differentiators, increase content emphasizing them.
+
+#### Best Known For
+
+Single phrase summarizing brand perception.
+
+**Examples**:
+- "Ease of use and intuitive interface"
+- "Enterprise-grade security and compliance"
+- "Affordable pricing for small teams"
+
+#### Pricing Perception
+
+AI's understanding of your pricing tier.
+
+**Values**:
+- **premium**: High-cost, enterprise-focused
+- **mid_range**: Balanced pricing
+- **budget**: Low-cost option
+- **free**: Freemium or fully free
+- **not_mentioned**: AI didn't discuss pricing
+
+<Warning>
+  If your pricing perception is inaccurate (e.g., AI thinks you're premium when you're mid-range), it may hurt recommendations. Publish pricing transparency content and get listed on comparison sites.
+</Warning>
+
+### Risk Identification
+
+Flags issues in AI responses that could harm your brand.
+
+**Risk types** (from `packages/services/src/analysis/analysisPrompt.ts:353`):
+
+<AccordionGroup>
+  <Accordion title="outdated_info">
+    **Definition**: AI states something factually outdated about your brand.
+
+    **Example**:
+    > "HubSpot does not offer native LinkedIn integration."
+    >
+    > (If you launched LinkedIn integration 6 months ago, this is outdated.)
+
+    **Severity**: Usually **critical** if materially incorrect.
+
+    **Action**: Publish press releases, update review site listings, create content explicitly stating the correction.
+  </Accordion>
+
+  <Accordion title="factual_error">
+    **Definition**: AI makes an incorrect claim (not just outdated—factually wrong).
+
+    **Example**:
+    > "Pipedrive is owned by Salesforce."
+    >
+    > (Incorrect—Pipedrive is independent.)
+
+    **Severity**: **critical**
+
+    **Action**: File corrections with AI providers if possible (OpenAI, Google have feedback mechanisms). Increase authoritative content stating the fact.
+  </Accordion>
+
+  <Accordion title="brand_confusion">
+    **Definition**: AI conflates your brand with another or attributes another brand's features to yours.
+
+    **Example**:
+    > "Zoho CRM, formerly known as HubSpot..."
+
+    **Severity**: **critical**
+
+    **Action**: Severe brand positioning issue. Increase distinct branding in all content. Consider trademark enforcement if appropriate.
+  </Accordion>
+
+  <Accordion title="negative_association">
+    **Definition**: AI associates your brand with a negative category or outcome.
+
+    **Example**:
+    > "CRM tools known for poor customer support include [YourBrand] and LegacyCRM."
+
+    **Severity**: **critical** to **warning**
+
+    **Action**: Investigate if the criticism is valid. If unfair, launch reputation management campaign.
+  </Accordion>
+
+  <Accordion title="missing_from_response">
+    **Definition**: Your brand is absent from a response where it objectively should appear.
+
+    **Example**: Prompt: "What are the best CRM tools?" AI lists 10 competitors but not your brand, despite being a major player.
+
+    **Severity**: **critical** (indicates severe visibility gap)
+
+    **Action**: Increase content marketing, get featured on major review sites, improve SEO for category terms.
+  </Accordion>
+</AccordionGroup>
+
+### Actions and Recommendations
+
+Each analysis provides 3-5 specific, actionable recommendations.
+
+**Priority levels**:
+- **critical**: Brand is actively harmed—immediate action required
+- **high**: Major missed opportunity
+- **medium**: Optimization opportunity
+- **low**: Nice-to-have improvement
+
+**Example actions output**:
+```json
+{
+  "actions": [
+    {
+      "priority": "critical",
+      "recommendation": "Correct factual error: AI states [YourBrand] lacks mobile app, but you launched it in Q2 2024. Publish announcement and update all review site profiles."
+    },
+    {
+      "priority": "high",
+      "recommendation": "Brand is mentioned but ranks #6 absolute (behind 5 competitors) despite strong features. Publish comparison content: '[YourBrand] vs [Top Competitor]' targeting this prompt's keywords."
+    },
+    {
+      "priority": "medium",
+      "recommendation": "Sentiment is neutral (score 52) due to lack of evaluative language. Encourage customer reviews and case studies to generate more positive third-party content AI can reference."
+    }
+  ]
+}
+```
+
+## Using Metrics for Strategy
+
+### Scenario 1: Low Presence Rate (&lt;40%)
+
+**Diagnosis**: AI providers lack awareness of your brand.
+
+**Action plan**:
+1. **Content blitz**: Publish 10-20 authoritative articles targeting your category
+2. **Review sites**: Get listed on G2, Capterra, TrustRadius with customer reviews
+3. **PR campaign**: Secure mentions in industry publications AI likely trains on
+4. **Backlink building**: Increase domain authority so AI trusts your content
+5. **Re-run prompts monthly**: Track presence rate improvement
+
+**Timeline**: 3-6 months to see impact (AI models retrain slowly)
+
+### Scenario 2: High Presence (70%+) but Low GEO Scores (&lt;50)
+
+**Diagnosis**: AI knows your brand but doesn't recommend it.
+
+**Action plan**:
+1. **Analyze sentiment and negatives**: What criticisms are recurring?
+2. **Address product gaps**: If AI mentions "lacks feature X", prioritize building it
+3. **Messaging overhaul**: If perception is off, update positioning across all channels
+4. **Competitive comparison content**: Publish "[YourBrand] vs [Competitor]" emphasizing wins
+5. **Customer proof**: Case studies, testimonials, and reviews that counter negative perceptions
+
+**Timeline**: 1-3 months for messaging changes to propagate
+
+### Scenario 3: Strong in Some Prompts, Weak in Others
+
+**Diagnosis**: Visibility is uneven across topics.
+
+**Action plan**:
+1. **Identify patterns**: Group prompts by topic/buyer persona
+2. **Double down on strengths**: Expand content for high-performing topics
+3. **Fill gaps**: Create content specifically for low-performing topics
+4. **Test prompt wording**: Sometimes rephrasing a prompt changes AI behavior
+
+**Example**:
+```
+High GEO: Prompts about "small business CRM"
+Low GEO: Prompts about "enterprise CRM"
+
+Action: Launch enterprise-focused content series and case studies
+```
+
+### Scenario 4: Competitor Consistently Outranks You
+
+**Diagnosis**: One competitor dominates AI mentions.
+
+**Action plan**:
+1. **Study competitor's sources**: What sites does AI cite when mentioning them?
+2. **Get featured on those sources**: Aim for G2, Gartner, review sites they dominate
+3. **Direct comparison content**: Publish "Why [YourBrand] vs [Competitor]" content
+4. **Monitor competitor differentiators**: See what AI says they do better, close those gaps
+5. **Track their GEO scores**: Use OneGlance to add prompts mentioning the competitor
+
+### Scenario 5: Factual Errors in AI Responses
+
+**Diagnosis**: AI has incorrect or outdated info.
+
+**Action plan**:
+1. **Document errors**: Screenshot AI responses showing incorrect claims
+2. **Publish corrections**: Blog posts, press releases explicitly correcting the info
+3. **Update review sites**: Ensure G2, Capterra, etc. have current accurate info
+4. **File feedback with AI providers**: OpenAI, Google, Anthropic have feedback forms
+5. **Re-run prompts monthly**: Verify corrections propagate to AI models
+
+<Warning>
+  AI model updates are infrequent (months). Don't expect instant corrections. Consistent, authoritative content over 3-6 months is required.
+</Warning>
+
+## Exporting and Reporting
+
+Share metrics with stakeholders via exports.
+
+### Dashboard Export
+
+From the Dashboard, click **Export** → **JSON** or **CSV**.
+
+**Contents**:
+- Aggregate stats (presence rate, avg rank, top competitor)
+- Impact metrics (total responses, recommendation rate, sentiment)
+- Brand perception (core claims, differentiators, pricing)
+- Source intelligence (top domains, citation counts)
+- Competitor data (visibility, sentiment, rank for each)
+
+### Prompts Export
+
+From the Prompts page, click **Export**.
+
+**Contents**:
+- Prompt-level metrics (GEO score, sentiment, visibility, position)
+- Full AI responses for each prompt
+- Response-level metrics (per provider)
+- Sources and citations
+
+### Custom Reporting
+
+For recurring executive reports, consider:
+
+1. **Export JSON**: Richer data for custom analysis
+2. **Process in Python/R**: Calculate custom metrics
+3. **Visualize**: Use Tableau, Looker, or custom dashboards
+4. **Automate**: Use OneGlance API to schedule exports
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Managing Prompts" icon="messages" href="/guides/managing-prompts">
+    Refine your prompt strategy based on metric insights
+  </Card>
+
+  <Card title="Scheduling" icon="clock" href="/guides/scheduling">
+    Track metric trends over time with automated runs
+  </Card>
+
+  <Card title="Team Collaboration" icon="users" href="/guides/team-collaboration">
+    Share metric reports and coordinate strategy across teams
+  </Card>
+
+  <Card title="API Reference" icon="code" href="/api-reference/metrics">
+    Programmatically access metrics for custom dashboards
+  </Card>
+</CardGroup>
+
+## Related Concepts
+
+- [Setup Guide](/guides/setup) - Initial workspace configuration
+- [Analysis Concepts](/concepts/analysis) - How OneGlance calculates metrics
+- [Workspace API](/api/workspace) - Programmatic access to metrics
